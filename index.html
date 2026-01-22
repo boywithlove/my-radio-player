@@ -7,17 +7,29 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .player-card { background: #1e1e1e; padding: 30px; border-radius: 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); text-align: center; width: 85%; max-width: 350px; }
-        .station-name { color: #ff3b30; font-weight: bold; margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; }
-        #title { font-size: 1.4rem; margin: 10px 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
+        
+        /* 앨범 아트 스타일 추가 */
+        .album-art-container { width: 100%; aspect-ratio: 1/1; margin-bottom: 20px; border-radius: 20px; overflow: hidden; background: #2a2a2a; box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
+        #album-art { width: 100%; height: 100%; object-fit: cover; display: none; } /* 이미지가 올 때까지 숨김 */
+        .placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 50px; }
+
+        .station-name { color: #ff3b30; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; text-transform: uppercase; }
+        #title { font-size: 1.3rem; margin: 10px 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #artist { color: #b3b3b3; margin: 0 0 20px; font-size: 1.0rem; }
         audio { width: 100%; filter: invert(100%); }
-        .loader { font-size: 0.8rem; color: #555; margin-top: 15px; }
+        .loader { font-size: 0.7rem; color: #555; margin-top: 15px; }
     </style>
 </head>
 <body>
 
 <div class="player-card">
     <div class="station-name">104.3 MYFM Live</div>
+    
+    <div class="album-art-container">
+        <div id="placeholder" class="placeholder">🎵</div>
+        <img id="album-art" src="" alt="Album Art">
+    </div>
+
     <h2 id="title">연결 중...</h2>
     <p id="artist">잠시만 기다려주세요</p>
     
@@ -30,7 +42,6 @@
 
 <script>
     const SLUG = "kbig-fm";
-    // CORS 문제를 우회하기 위한 프록시 서버입니다.
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
 
@@ -59,15 +70,28 @@
             if (track) {
                 document.getElementById('title').innerText = track.title;
                 document.getElementById('artist').innerText = track.artist.artistName;
-                document.getElementById('status').innerText = "실시간 업데이트 완료";
+                
+                // 앨범 이미지 업데이트 로직
+                const imgTag = document.getElementById('album-art');
+                const placeholder = document.getElementById('placeholder');
+                
+                if (track.image) {
+                    imgTag.src = track.image;
+                    imgTag.style.display = 'block';
+                    placeholder.style.display = 'none';
+                } else {
+                    imgTag.style.display = 'none';
+                    placeholder.style.display = 'flex';
+                }
+
+                document.getElementById('status').innerText = "최근 업데이트: " + new Date().toLocaleTimeString();
             }
         } catch (e) {
             console.error("Error:", e);
-            document.getElementById('status').innerText = "정보를 가져올 수 없음";
+            document.getElementById('status').innerText = "업데이트 실패";
         }
     }
 
-    // 20초마다 곡 정보 갱신
     setInterval(fetchTrack, 20000);
     fetchTrack();
 </script>
