@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>104.3 MYFM Radio</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .player-card { background: #1e1e1e; padding: 30px; border-radius: 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); text-align: center; width: 85%; max-width: 350px; }
+        .station-name { color: #ff3b30; font-weight: bold; margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; }
+        #title { font-size: 1.4rem; margin: 10px 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
+        audio { width: 100%; filter: invert(100%); }
+        .loader { font-size: 0.8rem; color: #555; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="player-card">
+    <div class="station-name">104.3 MYFM Live</div>
+    <h2 id="title">연결 중...</h2>
+    <p id="artist">잠시만 기다려주세요</p>
+    
+    <audio id="radio-player" controls>
+        <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
+    </audio>
+
+    <div class="loader" id="status">곡 정보 업데이트 중...</div>
+</div>
+
+<script>
+    const SLUG = "kbig-fm";
+    // CORS 문제를 우회하기 위한 프록시 서버입니다.
+    const PROXY_URL = "https://corsproxy.io/?"; 
+    const API_URL = "https://webapi.radioedit.iheart.com/graphql";
+
+    const PAYLOAD = {
+        "operationName": "GetCurrentlyPlayingSongs",
+        "variables": { "slug": SLUG, "paging": { "take": 1 } },
+        "extensions": {
+            "persistedQuery": {
+                "version": 1,
+                "sha256Hash": "386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060"
+            }
+        }
+    };
+
+    async function fetchTrack() {
+        try {
+            const response = await fetch(PROXY_URL + encodeURIComponent(API_URL), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(PAYLOAD)
+            });
+            
+            const data = await response.json();
+            const track = data.data.sites.find.stream.amp.currentlyPlaying.tracks[0];
+            
+            if (track) {
+                document.getElementById('title').innerText = track.title;
+                document.getElementById('artist').innerText = track.artist.artistName;
+                document.getElementById('status').innerText = "실시간 업데이트 완료";
+            }
+        } catch (e) {
+            console.error("Error:", e);
+            document.getElementById('status').innerText = "정보를 가져올 수 없음";
+        }
+    }
+
+    // 20초마다 곡 정보 갱신
+    setInterval(fetchTrack, 20000);
+    fetchTrack();
+</script>
+
+</body>
+</html>
