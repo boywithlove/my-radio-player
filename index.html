@@ -4,75 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>104.3 MYFM Radio Player</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MYFM Radio">
+    <link rel="apple-touch-icon" href="https://static.iheart.com/images/logos/iheartradio_logo_240.png">
+
     <style>
-        /* 기본 배경 및 폰트 설정 */
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #121212; 
-            color: white; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
-            margin: 0; 
-            overflow: hidden;
+            background: #121212; color: white; display: flex; align-items: center; 
+            justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0;
+            -webkit-user-select: none; touch-action: manipulation;
         }
 
-        /* 플레이어 카드 디자인 */
         .player-card { 
-            background: #1e1e1e; 
-            padding: 25px; 
-            border-radius: 35px; 
-            box-shadow: 0 25px 50px rgba(0,0,0,0.6); 
-            text-align: center; 
-            width: 85%; 
-            max-width: 360px; 
+            background: #1e1e1e; padding: 25px; border-radius: 35px; 
+            box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; 
+            width: 85%; max-width: 360px; 
         }
 
-        /* 앨범 커버 영역 */
+        /* 앨범 커버 스타일 */
         .album-art-container { 
-            width: 100%; 
-            aspect-ratio: 1/1; 
-            margin-bottom: 25px; 
-            border-radius: 20px; 
-            overflow: hidden; 
-            background: #2a2a2a; 
-            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
-            position: relative;
+            width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
+            border-radius: 20px; overflow: hidden; background: #2a2a2a; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4); position: relative;
         }
+        #album-art { width: 100%; height: 100%; object-fit: cover; display: none; transition: opacity 0.5s ease; }
+        .placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #444; }
 
-        #album-art { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
-            display: none; /* 이미지 로드 전까지 숨김 */
-        }
-
-        .placeholder { 
-            width: 100%; 
-            height: 100%; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 60px; 
-            color: #444;
-        }
-
-        /* 텍스트 정보 스타일 */
         .station-name { color: #ff3b30; font-weight: 800; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
         #title { font-size: 1.4rem; margin: 10px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
-        #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; font-weight: 400; }
+        #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
 
-        /* 오디오 컨트롤러 스타일 (아이폰 다크모드 최적화) */
-        audio { 
-            width: 100%; 
-            height: 45px;
-            filter: invert(1) hue-rotate(180deg); /* 다크 테마에 맞게 색상 반전 */
-            border-radius: 10px;
-        }
+        audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
 
-        /* 상태 표시 줄 */
-        .status-bar { font-size: 0.7rem; color: #555; margin-top: 20px; border-top: 1px solid #2a2a2a; pt: 15px; }
+        /* 히스토리 리스트 스타일 */
+        .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; pt: 15px; }
+        .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; }
+        .history-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
+        .history-thumb { width: 40px; height: 40px; border-radius: 6px; margin-right: 12px; background: #333; object-fit: cover; }
+        .history-info { overflow: hidden; }
+        .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .status-bar { font-size: 0.65rem; color: #444; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -92,13 +68,22 @@
         <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
     </audio>
 
-    <div class="status-bar" id="status">정보를 동기화하는 중...</div>
+    <div class="history-section">
+        <div class="history-title">Recently Played</div>
+        <div id="history-list">
+            </div>
+    </div>
+
+    <div class="status-bar" id="status">Syncing...</div>
 </div>
 
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
+    
+    let lastTrackId = null;
+    let historyData = [];
 
     const PAYLOAD = {
         "operationName": "GetCurrentlyPlayingSongs",
@@ -113,7 +98,6 @@
 
     async function fetchTrack() {
         try {
-            // URL에 타임스탬프를 추가하여 캐시 방지
             const targetUrl = API_URL + "?t=" + new Date().getTime();
             const response = await fetch(PROXY_URL + encodeURIComponent(targetUrl), {
                 method: "POST",
@@ -125,40 +109,87 @@
             const track = data.data.sites.find.stream.amp.currentlyPlaying.tracks[0];
             
             if (track) {
-                // 제목 및 가수 업데이트
-                document.getElementById('title').innerText = track.title || "Unknown Title";
-                document.getElementById('artist').innerText = (track.artist && track.artist.artistName) ? track.artist.artistName : "Unknown Artist";
-                
-                // 이미지 추출 시도 (다양한 경로 탐색)
-                const imgTag = document.getElementById('album-art');
-                const placeholder = document.getElementById('placeholder');
-                
+                const title = track.title || "Unknown Title";
+                const artistName = (track.artist && track.artist.artistName) ? track.artist.artistName : "Unknown Artist";
+                const currentId = `${title}-${artistName}`;
                 const imageUrl = track.image || track.imagePath || (track.artist && track.artist.image);
+                const finalUrl = imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : '';
 
-                if (imageUrl) {
-                    // 프로토콜이 빠진 경우 보정
-                    const finalUrl = imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl;
+                // 새로운 곡인지 확인
+                if (currentId !== lastTrackId) {
+                    // 히스토리 업데이트 (이전 곡을 리스트에 추가)
+                    if (lastTrackId !== null) {
+                        updateHistory({
+                            title: document.getElementById('title').innerText,
+                            artist: document.getElementById('artist').innerText,
+                            image: document.getElementById('album-art').src
+                        });
+                    }
                     
-                    imgTag.src = finalUrl;
-                    imgTag.onload = () => {
-                        imgTag.style.display = 'block';
-                        placeholder.style.display = 'none';
-                    };
-                } else {
-                    // 이미지가 없는 경우 기본 아이콘 표시
-                    imgTag.style.display = 'none';
-                    placeholder.style.display = 'flex';
-                }
+                    lastTrackId = currentId;
 
+                    // 현재 곡 UI 업데이트
+                    document.getElementById('title').innerText = title;
+                    document.getElementById('artist').innerText = artistName;
+                    
+                    const imgTag = document.getElementById('album-art');
+                    const placeholder = document.getElementById('placeholder');
+                    
+                    if (finalUrl) {
+                        imgTag.src = finalUrl;
+                        imgTag.onload = () => {
+                            imgTag.style.display = 'block';
+                            placeholder.style.display = 'none';
+                        };
+                    } else {
+                        imgTag.style.display = 'none';
+                        placeholder.style.display = 'flex';
+                    }
+
+                    // 잠금 화면(Media Session) 업데이트
+                    if ('mediaSession' in navigator) {
+                        navigator.mediaSession.metadata = new MediaMetadata({
+                            title: title,
+                            artist: artistName,
+                            album: "104.3 MYFM",
+                            artwork: [{ src: finalUrl || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png', sizes: '512x512', type: 'image/png' }]
+                        });
+                    }
+                }
                 document.getElementById('status').innerText = "Last Update: " + new Date().toLocaleTimeString();
             }
         } catch (e) {
             console.error("Fetch Error:", e);
-            document.getElementById('status').innerText = "업데이트 일시 중단";
         }
     }
 
-    // 20초마다 갱신 (20000ms)
+    function updateHistory(oldTrack) {
+        // 배열 앞에 추가하고 3개만 유지
+        historyData.unshift(oldTrack);
+        if (historyData.length > 3) historyData.pop();
+
+        const listDiv = document.getElementById('history-list');
+        listDiv.innerHTML = ''; // 초기화 후 다시 그리기
+
+        historyData.forEach(item => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'history-item';
+            
+            // 이미지가 유효하지 않을 경우 대비
+            const thumbSrc = item.image.includes('placeholder') ? '' : item.image;
+            const thumbHtml = thumbSrc ? `<img src="${thumbSrc}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;font-size:12px;">🎵</div>`;
+
+            itemDiv.innerHTML = `
+                ${thumbHtml}
+                <div class="history-info">
+                    <div class="history-song">${item.title}</div>
+                    <div class="history-artist">${item.artist}</div>
+                </div>
+            `;
+            listDiv.appendChild(itemDiv);
+        });
+    }
+
     setInterval(fetchTrack, 20000);
     fetchTrack();
 </script>
