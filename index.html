@@ -13,7 +13,7 @@
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             background: #121212; color: white; display: flex; align-items: center; 
-            justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0;
+            justify-content: center; min-height: 100vh; margin: 0; padding: 40px 0; /* 패딩 증가 */
             -webkit-user-select: none; touch-action: manipulation;
         }
         .player-card { 
@@ -32,21 +32,24 @@
         #title { font-size: 1.4rem; margin: 10px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
         #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
+        
+        /* 히스토리 섹션 (5곡에 맞춰 높이 자동 조절) */
         .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
-        .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; }
-        .history-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
-        .history-thumb { width: 40px; height: 40px; border-radius: 6px; margin-right: 12px; background: #333; object-fit: cover; }
+        .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 12px; font-weight: bold; }
+        .history-item { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
+        .history-thumb { width: 45px; height: 45px; border-radius: 8px; margin-right: 12px; background: #333; object-fit: cover; flex-shrink: 0; }
         .history-info { overflow: hidden; }
-        .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; margin-bottom: 2px; }
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .status-bar { font-size: 0.65rem; color: #444; margin-top: 20px; }
+        .status-bar { font-size: 0.65rem; color: #444; margin-top: 25px; }
     </style>
 </head>
 <body>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM Live - V1R2 </div>
+    <div class="station-name">104.3 MYFM Live - V2R1 </div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -65,20 +68,18 @@
         <div id="history-list"></div>
     </div>
 
-    <div class="status-bar" id="status">Syncing...</div>
+    <div class="status-bar" id="status">Syncing (50s delay)...</div>
 </div>
 
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
-    
-    // 지연 시간 설정 (10초)
-    const SYNC_DELAY = 10000; 
+    const SYNC_DELAY = 10000; // 10초 지연
     
     let lastTrackId = null;
     let historyData = [];
-    let isFirstLoad = true; // 첫 로딩인지 확인하는 플래그
+    let isFirstLoad = true;
 
     const PAYLOAD = {
         "operationName": "GetCurrentlyPlayingSongs",
@@ -110,13 +111,10 @@
 
                 if (currentId !== lastTrackId) {
                     lastTrackId = currentId;
-
                     if (isFirstLoad) {
-                        // 첫 로딩이면 즉시 업데이트
                         updateUI(track, title, artistName);
                         isFirstLoad = false;
                     } else {
-                        // 그 다음부터는 설정된 지연 시간(50초) 후에 업데이트
                         setTimeout(() => {
                             updateUI(track, title, artistName);
                         }, SYNC_DELAY);
@@ -133,7 +131,6 @@
         const currentArtist = document.getElementById('artist').innerText;
         const currentImg = document.getElementById('album-art').src;
 
-        // 히스토리 업데이트
         if (currentTitle !== "연결 중..." && currentTitle !== title) {
             updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
         }
@@ -170,7 +167,9 @@
 
     function updateHistory(oldTrack) {
         historyData.unshift(oldTrack);
-        if (historyData.length > 3) historyData.pop();
+        // 이 부분을 5로 수정하여 5곡까지 보관합니다.
+        if (historyData.length > 5) historyData.pop();
+
         const listDiv = document.getElementById('history-list');
         listDiv.innerHTML = ''; 
         historyData.forEach(item => {
@@ -183,8 +182,7 @@
         });
     }
 
-// 업데이트 주기 설정 (10초)
-
+    // 10초마다 확인
     setInterval(fetchTrack, 10000);
     fetchTrack();
 </script>
