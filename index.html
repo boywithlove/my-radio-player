@@ -16,13 +16,11 @@
             justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0;
             -webkit-user-select: none; touch-action: manipulation;
         }
-
         .player-card { 
             background: #1e1e1e; padding: 25px; border-radius: 35px; 
             box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; 
             width: 85%; max-width: 360px; 
         }
-
         .album-art-container { 
             width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
             border-radius: 20px; overflow: hidden; background: #2a2a2a; 
@@ -30,14 +28,10 @@
         }
         #album-art { width: 100%; height: 100%; object-fit: cover; display: none; transition: opacity 0.5s ease; }
         .placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #444; }
-
         .station-name { color: #ff3b30; font-weight: 800; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
         #title { font-size: 1.4rem; margin: 10px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
         #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
-
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
-
-        /* 히스토리 리스트 스타일 */
         .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
         .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; }
         .history-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
@@ -45,7 +39,6 @@
         .history-info { overflow: hidden; }
         .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .status-bar { font-size: 0.65rem; color: #444; margin-top: 20px; }
     </style>
@@ -53,7 +46,7 @@
 <body>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM Live V1</div>
+    <div class="station-name">104.3 MYFM Live - V1R1 </div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -72,17 +65,20 @@
         <div id="history-list"></div>
     </div>
 
-    <div class="status-bar" id="status">Syncing (30s delay)...</div>
+    <div class="status-bar" id="status">Syncing...</div>
 </div>
 
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
-    const SYNC_DELAY = 60000; // 스트리밍 지연에 맞춘 60초 대기 시간
+    
+    // 지연 시간 설정 (50초)
+    const SYNC_DELAY = 50000; 
     
     let lastTrackId = null;
     let historyData = [];
+    let isFirstLoad = true; // 첫 로딩인지 확인하는 플래그
 
     const PAYLOAD = {
         "operationName": "GetCurrentlyPlayingSongs",
@@ -112,13 +108,19 @@
                 const artistName = (track.artist && track.artist.artistName) ? track.artist.artistName : "Unknown Artist";
                 const currentId = `${title}-${artistName}`;
 
-                // 새로운 곡이 감지되면 30초 후에 UI 업데이트
                 if (currentId !== lastTrackId) {
                     lastTrackId = currentId;
-                    
-                    setTimeout(() => {
+
+                    if (isFirstLoad) {
+                        // 첫 로딩이면 즉시 업데이트
                         updateUI(track, title, artistName);
-                    }, SYNC_DELAY);
+                        isFirstLoad = false;
+                    } else {
+                        // 그 다음부터는 설정된 지연 시간(50초) 후에 업데이트
+                        setTimeout(() => {
+                            updateUI(track, title, artistName);
+                        }, SYNC_DELAY);
+                    }
                 }
             }
         } catch (e) {
@@ -131,12 +133,11 @@
         const currentArtist = document.getElementById('artist').innerText;
         const currentImg = document.getElementById('album-art').src;
 
-        // 현재 곡을 히스토리로 이동 (첫 로딩 제외)
+        // 히스토리 업데이트
         if (currentTitle !== "연결 중..." && currentTitle !== title) {
             updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
         }
 
-        // 현재 곡 정보 업데이트
         document.getElementById('title').innerText = title;
         document.getElementById('artist').innerText = artistName;
         
@@ -156,7 +157,6 @@
             placeholder.style.display = 'flex';
         }
 
-        // 잠금 화면(Media Session) 업데이트
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
@@ -165,35 +165,24 @@
                 artwork: [{ src: finalUrl || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png', sizes: '512x512', type: 'image/png' }]
             });
         }
-        
         document.getElementById('status').innerText = "Updated at " + new Date().toLocaleTimeString();
     }
 
     function updateHistory(oldTrack) {
         historyData.unshift(oldTrack);
         if (historyData.length > 3) historyData.pop();
-
         const listDiv = document.getElementById('history-list');
         listDiv.innerHTML = ''; 
-
         historyData.forEach(item => {
             const itemDiv = document.createElement('div');
             itemDiv.className = 'history-item';
             const hasRealImg = item.image && !item.image.includes('placeholder') && item.image !== window.location.href;
             const thumbHtml = hasRealImg ? `<img src="${item.image}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;font-size:12px;">🎵</div>`;
-
-            itemDiv.innerHTML = `
-                ${thumbHtml}
-                <div class="history-info">
-                    <div class="history-song">${item.title}</div>
-                    <div class="history-artist">${item.artist}</div>
-                </div>
-            `;
+            itemDiv.innerHTML = `${thumbHtml}<div class="history-info"><div class="history-song">${item.title}</div><div class="history-artist">${item.artist}</div></div>`;
             listDiv.appendChild(itemDiv);
         });
     }
 
-    // 20초마다 API 체크 (데이터는 SYNC_DELAY 후 화면에 표시됨)
     setInterval(fetchTrack, 20000);
     fetchTrack();
 </script>
