@@ -13,7 +13,7 @@
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             background: #121212; color: white; display: flex; align-items: center; 
-            justify-content: center; min-height: 100vh; margin: 0; padding: 40px 0; /* 패딩 증가 */
+            justify-content: center; min-height: 100vh; margin: 0; padding: 40px 0;
             -webkit-user-select: none; touch-action: manipulation;
         }
         .player-card { 
@@ -33,7 +33,6 @@
         #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
         
-        /* 히스토리 섹션 (5곡에 맞춰 높이 자동 조절) */
         .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
         .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 12px; font-weight: bold; }
         .history-item { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
@@ -49,7 +48,7 @@
 <body>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM Live - V2R2 </div>
+    <div class="station-name">104.3 MYFM Live - V2R3 </div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -75,10 +74,10 @@
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
-    const SYNC_DELAY = 30000; // 30초 지연
+    const SYNC_DELAY = 30000;  // 30초 대기
     
     let lastTrackId = null;
-    let historyData = [];
+    let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; // 저장된 데이터 불러오기
     let isFirstLoad = true;
 
     const PAYLOAD = {
@@ -90,6 +89,11 @@
                 "sha256Hash": "386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060"
             }
         }
+    };
+
+    // 초기 실행 시 저장된 히스토리 화면에 그리기
+    window.onload = () => {
+        renderHistory();
     };
 
     async function fetchTrack() {
@@ -132,7 +136,10 @@
         const currentImg = document.getElementById('album-art').src;
 
         if (currentTitle !== "연결 중..." && currentTitle !== title) {
-            updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
+            // 히스토리에 추가하기 전 중복 체크 (최근 곡과 같으면 무시)
+            if (historyData.length === 0 || historyData[0].title !== currentTitle) {
+                updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
+            }
         }
 
         document.getElementById('title').innerText = title;
@@ -167,22 +174,28 @@
 
     function updateHistory(oldTrack) {
         historyData.unshift(oldTrack);
-        // 이 부분을 5로 수정하여 5곡까지 보관합니다.
         if (historyData.length > 5) historyData.pop();
+        
+        // 로컬 스토리지에 저장
+        localStorage.setItem('radioHistory', JSON.stringify(historyData));
+        
+        renderHistory();
+    }
 
+    function renderHistory() {
         const listDiv = document.getElementById('history-list');
         listDiv.innerHTML = ''; 
         historyData.forEach(item => {
             const itemDiv = document.createElement('div');
             itemDiv.className = 'history-item';
-            const hasRealImg = item.image && !item.image.includes('placeholder') && item.image !== window.location.href;
+            // 이미지 주소가 유효한지 확인 (로컬 스토리지에서 불러올 때 오류 방지)
+            const hasRealImg = item.image && item.image.startsWith('http') && !item.image.includes('placeholder') && !item.image.includes(window.location.host);
             const thumbHtml = hasRealImg ? `<img src="${item.image}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;font-size:12px;">🎵</div>`;
             itemDiv.innerHTML = `${thumbHtml}<div class="history-info"><div class="history-song">${item.title}</div><div class="history-artist">${item.artist}</div></div>`;
             listDiv.appendChild(itemDiv);
         });
     }
 
-    // 10초마다 확인
     setInterval(fetchTrack, 10000);
     fetchTrack();
 </script>
