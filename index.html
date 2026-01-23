@@ -73,8 +73,8 @@
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
     
-    // 지연 시간 설정 (50초)
-    const SYNC_DELAY = 50000; 
+    // 지연 시간 설정 (10초)
+    const SYNC_DELAY = 10000; 
     
     let lastTrackId = null;
     let historyData = [];
@@ -183,7 +183,9 @@
         });
     }
 
-    setInterval(fetchTrack, 20000);
+// 업데이트 주기 설정 (10초)
+
+    setInterval(fetchTrack, 10000);
     fetchTrack();
 </script>
 
