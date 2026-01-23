@@ -23,7 +23,6 @@
             width: 85%; max-width: 360px; 
         }
 
-        /* 앨범 커버 스타일 */
         .album-art-container { 
             width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
             border-radius: 20px; overflow: hidden; background: #2a2a2a; 
@@ -39,7 +38,7 @@
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
 
         /* 히스토리 리스트 스타일 */
-        .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; pt: 15px; }
+        .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
         .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; }
         .history-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
         .history-thumb { width: 40px; height: 40px; border-radius: 6px; margin-right: 12px; background: #333; object-fit: cover; }
@@ -70,17 +69,17 @@
 
     <div class="history-section">
         <div class="history-title">Recently Played</div>
-        <div id="history-list">
-            </div>
+        <div id="history-list"></div>
     </div>
 
-    <div class="status-bar" id="status">Syncing...</div>
+    <div class="status-bar" id="status">Syncing (30s delay)...</div>
 </div>
 
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
+    const SYNC_DELAY = 30000; // 스트리밍 지연에 맞춘 30초 대기 시간
     
     let lastTrackId = null;
     let historyData = [];
@@ -112,72 +111,76 @@
                 const title = track.title || "Unknown Title";
                 const artistName = (track.artist && track.artist.artistName) ? track.artist.artistName : "Unknown Artist";
                 const currentId = `${title}-${artistName}`;
-                const imageUrl = track.image || track.imagePath || (track.artist && track.artist.image);
-                const finalUrl = imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : '';
 
-                // 새로운 곡인지 확인
+                // 새로운 곡이 감지되면 30초 후에 UI 업데이트
                 if (currentId !== lastTrackId) {
-                    // 히스토리 업데이트 (이전 곡을 리스트에 추가)
-                    if (lastTrackId !== null) {
-                        updateHistory({
-                            title: document.getElementById('title').innerText,
-                            artist: document.getElementById('artist').innerText,
-                            image: document.getElementById('album-art').src
-                        });
-                    }
-                    
                     lastTrackId = currentId;
-
-                    // 현재 곡 UI 업데이트
-                    document.getElementById('title').innerText = title;
-                    document.getElementById('artist').innerText = artistName;
                     
-                    const imgTag = document.getElementById('album-art');
-                    const placeholder = document.getElementById('placeholder');
-                    
-                    if (finalUrl) {
-                        imgTag.src = finalUrl;
-                        imgTag.onload = () => {
-                            imgTag.style.display = 'block';
-                            placeholder.style.display = 'none';
-                        };
-                    } else {
-                        imgTag.style.display = 'none';
-                        placeholder.style.display = 'flex';
-                    }
-
-                    // 잠금 화면(Media Session) 업데이트
-                    if ('mediaSession' in navigator) {
-                        navigator.mediaSession.metadata = new MediaMetadata({
-                            title: title,
-                            artist: artistName,
-                            album: "104.3 MYFM",
-                            artwork: [{ src: finalUrl || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png', sizes: '512x512', type: 'image/png' }]
-                        });
-                    }
+                    setTimeout(() => {
+                        updateUI(track, title, artistName);
+                    }, SYNC_DELAY);
                 }
-                document.getElementById('status').innerText = "Last Update: " + new Date().toLocaleTimeString();
             }
         } catch (e) {
             console.error("Fetch Error:", e);
         }
     }
 
+    function updateUI(track, title, artistName) {
+        const currentTitle = document.getElementById('title').innerText;
+        const currentArtist = document.getElementById('artist').innerText;
+        const currentImg = document.getElementById('album-art').src;
+
+        // 현재 곡을 히스토리로 이동 (첫 로딩 제외)
+        if (currentTitle !== "연결 중..." && currentTitle !== title) {
+            updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
+        }
+
+        // 현재 곡 정보 업데이트
+        document.getElementById('title').innerText = title;
+        document.getElementById('artist').innerText = artistName;
+        
+        const imgTag = document.getElementById('album-art');
+        const placeholder = document.getElementById('placeholder');
+        const imageUrl = track.image || track.imagePath || (track.artist && track.artist.image);
+        const finalUrl = imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : '';
+
+        if (finalUrl) {
+            imgTag.src = finalUrl;
+            imgTag.onload = () => {
+                imgTag.style.display = 'block';
+                placeholder.style.display = 'none';
+            };
+        } else {
+            imgTag.style.display = 'none';
+            placeholder.style.display = 'flex';
+        }
+
+        // 잠금 화면(Media Session) 업데이트
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title,
+                artist: artistName,
+                album: "104.3 MYFM",
+                artwork: [{ src: finalUrl || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png', sizes: '512x512', type: 'image/png' }]
+            });
+        }
+        
+        document.getElementById('status').innerText = "Updated at " + new Date().toLocaleTimeString();
+    }
+
     function updateHistory(oldTrack) {
-        // 배열 앞에 추가하고 3개만 유지
         historyData.unshift(oldTrack);
         if (historyData.length > 3) historyData.pop();
 
         const listDiv = document.getElementById('history-list');
-        listDiv.innerHTML = ''; // 초기화 후 다시 그리기
+        listDiv.innerHTML = ''; 
 
         historyData.forEach(item => {
             const itemDiv = document.createElement('div');
             itemDiv.className = 'history-item';
-            
-            // 이미지가 유효하지 않을 경우 대비
-            const thumbSrc = item.image.includes('placeholder') ? '' : item.image;
-            const thumbHtml = thumbSrc ? `<img src="${thumbSrc}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;font-size:12px;">🎵</div>`;
+            const hasRealImg = item.image && !item.image.includes('placeholder') && item.image !== window.location.href;
+            const thumbHtml = hasRealImg ? `<img src="${item.image}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;font-size:12px;">🎵</div>`;
 
             itemDiv.innerHTML = `
                 ${thumbHtml}
@@ -190,6 +193,7 @@
         });
     }
 
+    // 20초마다 API 체크 (데이터는 SYNC_DELAY 후 화면에 표시됨)
     setInterval(fetchTrack, 20000);
     fetchTrack();
 </script>
