@@ -19,28 +19,48 @@
         .player-card { 
             background: #1e1e1e; padding: 25px; border-radius: 35px; 
             box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; 
-            width: 85%; max-width: 360px; 
+            width: 85%; max-width: 360px; position: relative;
         }
         .album-art-container { 
             width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
             border-radius: 20px; overflow: hidden; background: #2a2a2a; 
             box-shadow: 0 10px 20px rgba(0,0,0,0.4); position: relative;
         }
-        #album-art { width: 100%; height: 100%; object-fit: cover; display: none; transition: opacity 0.5s ease; }
+        #album-art { width: 100%; height: 100%; object-fit: cover; display: none; }
         .placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #444; }
         .station-name { color: #ff3b30; font-weight: 800; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
         #title { font-size: 1.4rem; margin: 10px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
-        #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
-        audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
+        #artist { color: #b3b3b3; margin: 0 0 20px; font-size: 1.1rem; }
         
+        /* 볼륨 조절 슬라이더 디자인 */
+        .volume-container { display: flex; align-items: center; gap: 10px; margin: 20px 0; padding: 0 10px; }
+        .volume-icon { font-size: 18px; color: #888; }
+        #volume-slider { 
+            flex: 1; -webkit-appearance: none; background: #333; height: 4px; border-radius: 2px; outline: none;
+        }
+        #volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 18px; height: 18px; background: #ff3b30; border-radius: 50%; cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; margin-bottom: 10px; }
+        
+        /* 히스토리 섹션 */
         .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
         .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 12px; font-weight: bold; }
         .history-item { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
         .history-thumb { width: 45px; height: 45px; border-radius: 8px; margin-right: 12px; background: #333; object-fit: cover; flex-shrink: 0; }
         .history-info { overflow: hidden; }
-        .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; margin-bottom: 2px; }
-        .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .history-artist { font-size: 0.8rem; color: #888; }
         
+        /* 새로고침 플로팅 버튼 */
+        .refresh-btn { 
+            position: fixed; bottom: 20px; right: 20px; width: 44px; height: 44px; 
+            background: rgba(255, 59, 48, 0.8); border-radius: 50%; display: flex; 
+            align-items: center; justify-content: center; font-size: 20px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 100; cursor: pointer;
+        }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .status-bar { font-size: 0.65rem; color: #444; margin-top: 25px; }
     </style>
@@ -48,7 +68,7 @@
 <body>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM Live - V3R1</div>
+    <div class="station-name">104.3 MYFM Live - V3R2 </div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -62,6 +82,12 @@
         <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
     </audio>
 
+    <div class="volume-container">
+        <span class="volume-icon">🔈</span>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+        <span class="volume-icon">🔊</span>
+    </div>
+
     <div class="history-section">
         <div class="history-title">Recently Played</div>
         <div id="history-list"></div>
@@ -70,15 +96,24 @@
     <div class="status-bar" id="status">Syncing (1s delay)...</div>
 </div>
 
+<div class="refresh-btn" onclick="location.reload();">🔄</div>
+
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
     const SYNC_DELAY = 1000; 
     
+    const audio = document.getElementById('radio-player');
+    const volumeSlider = document.getElementById('volume-slider');
     let lastTrackId = null;
     let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; 
     let isFirstLoad = true;
+
+    // 볼륨 조절 이벤트
+    volumeSlider.addEventListener('input', (e) => {
+        audio.volume = e.target.value;
+    });
 
     const PAYLOAD = {
         "operationName": "GetCurrentlyPlayingSongs",
@@ -144,8 +179,6 @@
         const imgTag = document.getElementById('album-art');
         const placeholder = document.getElementById('placeholder');
         const imageUrl = track.image || track.imagePath || (track.artist && track.artist.image);
-        
-        // 캐시 방지 파라미터
         const dynamicUrl = (imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : 'https://static.iheart.com/images/logos/iheartradio_logo_240.png') + "?v=" + Date.now();
 
         if (imageUrl) {
@@ -159,12 +192,8 @@
             placeholder.style.display = 'flex';
         }
 
-        // [핵심] 소리 끊김 없는 세션 갱신 로직
         if ('mediaSession' in navigator) {
-            // 1. 상태를 일시정지로 속임 (소리는 실제 정지하지 않음)
             navigator.mediaSession.playbackState = "paused";
-            
-            // 2. 메타데이터 갱신
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
                 artist: artistName,
@@ -174,11 +203,7 @@
                     { src: dynamicUrl, sizes: '512x512', type: 'image/png' }
                 ]
             });
-
-            // 3. 아주 짧은 찰나(100ms) 뒤에 다시 '재생 중'으로 변경하여 차에 신호 전송
-            setTimeout(() => {
-                navigator.mediaSession.playbackState = "playing";
-            }, 100);
+            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 100);
         }
         document.getElementById('status').innerText = "Updated at " + new Date().toLocaleTimeString();
     }
