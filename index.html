@@ -48,7 +48,7 @@
 <body>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM Live - V2R5 </div>
+    <div class="station-name">104.3 MYFM Live - V3R1</div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -67,14 +67,14 @@
         <div id="history-list"></div>
     </div>
 
-    <div class="status-bar" id="status">Syncing (5s delay)...</div>
+    <div class="status-bar" id="status">Syncing (1s delay)...</div>
 </div>
 
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
-    const SYNC_DELAY = 5000; 
+    const SYNC_DELAY = 1000; 
     
     let lastTrackId = null;
     let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; 
@@ -145,13 +145,11 @@
         const placeholder = document.getElementById('placeholder');
         const imageUrl = track.image || track.imagePath || (track.artist && track.artist.image);
         
-        // 캐시 방지 파라미터 추가 (Date.now())
-        const cacheBuster = "?v=" + Date.now();
-        const finalUrl = imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
-        const dynamicUrl = finalUrl + cacheBuster;
+        // 캐시 방지 파라미터
+        const dynamicUrl = (imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : 'https://static.iheart.com/images/logos/iheartradio_logo_240.png') + "?v=" + Date.now();
 
         if (imageUrl) {
-            imgTag.src = finalUrl; // 화면에는 원본 사용
+            imgTag.src = dynamicUrl;
             imgTag.onload = () => {
                 imgTag.style.display = 'block';
                 placeholder.style.display = 'none';
@@ -161,21 +159,26 @@
             placeholder.style.display = 'flex';
         }
 
-        // [중요] 차량 블루투스 및 잠금 화면 전송 강화 로직
+        // [핵심] 소리 끊김 없는 세션 갱신 로직
         if ('mediaSession' in navigator) {
-            // 메타데이터를 초기화한 후 다시 설정하여 갱신 알림 강제화
-            navigator.mediaSession.metadata = null; 
-
+            // 1. 상태를 일시정지로 속임 (소리는 실제 정지하지 않음)
+            navigator.mediaSession.playbackState = "paused";
+            
+            // 2. 메타데이터 갱신
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
                 artist: artistName,
                 album: "104.3 MYFM Live",
                 artwork: [
-                    { src: dynamicUrl, sizes: '96x96',   type: 'image/png' },
                     { src: dynamicUrl, sizes: '256x256', type: 'image/png' },
                     { src: dynamicUrl, sizes: '512x512', type: 'image/png' }
                 ]
             });
+
+            // 3. 아주 짧은 찰나(100ms) 뒤에 다시 '재생 중'으로 변경하여 차에 신호 전송
+            setTimeout(() => {
+                navigator.mediaSession.playbackState = "playing";
+            }, 100);
         }
         document.getElementById('status').innerText = "Updated at " + new Date().toLocaleTimeString();
     }
@@ -200,7 +203,6 @@
         });
     }
 
-    // 10초마다 API 확인
     setInterval(fetchTrack, 10000);
     fetchTrack();
 </script>
