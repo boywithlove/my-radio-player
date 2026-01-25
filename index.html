@@ -30,21 +30,16 @@
         .placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #444; }
         .station-name { color: #ff3b30; font-weight: 800; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
         #title { font-size: 1.4rem; margin: 10px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
-        #artist { color: #b3b3b3; margin: 0 0 20px; font-size: 1.1rem; }
+        #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
         
-        /* 볼륨 조절 슬라이더 디자인 */
-        .volume-container { display: flex; align-items: center; gap: 10px; margin: 20px 0; padding: 0 10px; }
-        .volume-icon { font-size: 18px; color: #888; }
-        #volume-slider { 
-            flex: 1; -webkit-appearance: none; background: #333; height: 4px; border-radius: 2px; outline: none;
+        /* 기본 플레이어 디자인 최적화 */
+        audio { 
+            width: 100%; height: 45px; 
+            filter: invert(1) hue-rotate(180deg); 
+            border-radius: 10px; 
+            margin-bottom: 10px;
         }
-        #volume-slider::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 18px; height: 18px; background: #ff3b30; border-radius: 50%; cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-
-        audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; margin-bottom: 10px; }
         
-        /* 히스토리 섹션 */
         .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
         .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 12px; font-weight: bold; }
         .history-item { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
@@ -53,7 +48,6 @@
         .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .history-artist { font-size: 0.8rem; color: #888; }
         
-        /* 새로고침 플로팅 버튼 */
         .refresh-btn { 
             position: fixed; bottom: 20px; right: 20px; width: 44px; height: 44px; 
             background: rgba(255, 59, 48, 0.8); border-radius: 50%; display: flex; 
@@ -65,10 +59,8 @@
         .status-bar { font-size: 0.65rem; color: #444; margin-top: 25px; }
     </style>
 </head>
-<body>
-
-<div class="player-card">
-    <div class="station-name">104.3 MYFM Live - V3R2 </div>
+<body onclick="autoPlay()"> <div class="player-card">
+    <div class="station-name">104.3 MYFM Live - V3R3 </div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -76,24 +68,18 @@
     </div>
 
     <h2 id="title">연결 중...</h2>
-    <p id="artist">잠시만 기다려주세요</p>
+    <p id="artist">화면을 터치하여 재생</p>
     
     <audio id="radio-player" controls preload="auto">
         <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
     </audio>
-
-    <div class="volume-container">
-        <span class="volume-icon">🔈</span>
-        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
-        <span class="volume-icon">🔊</span>
-    </div>
 
     <div class="history-section">
         <div class="history-title">Recently Played</div>
         <div id="history-list"></div>
     </div>
 
-    <div class="status-bar" id="status">Syncing (1s delay)...</div>
+    <div class="status-bar" id="status">Syncing...</div>
 </div>
 
 <div class="refresh-btn" onclick="location.reload();">🔄</div>
@@ -105,15 +91,19 @@
     const SYNC_DELAY = 1000; 
     
     const audio = document.getElementById('radio-player');
-    const volumeSlider = document.getElementById('volume-slider');
     let lastTrackId = null;
     let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; 
     let isFirstLoad = true;
+    let hasStarted = false;
 
-    // 볼륨 조절 이벤트
-    volumeSlider.addEventListener('input', (e) => {
-        audio.volume = e.target.value;
-    });
+    // 자동 재생 함수 (첫 터치 시 실행)
+    function autoPlay() {
+        if (!hasStarted) {
+            audio.play();
+            hasStarted = true;
+            document.getElementById('artist').innerText = "잠시만 기다려주세요";
+        }
+    }
 
     const PAYLOAD = {
         "operationName": "GetCurrentlyPlayingSongs",
@@ -126,7 +116,7 @@
         }
     };
 
-    window.onload = () => { renderHistory(); };
+    window.onload = () => { renderHistory(); fetchTrack(); };
 
     async function fetchTrack() {
         try {
@@ -203,9 +193,9 @@
                     { src: dynamicUrl, sizes: '512x512', type: 'image/png' }
                 ]
             });
-            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 100);
+            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 150);
         }
-        document.getElementById('status').innerText = "Updated at " + new Date().toLocaleTimeString();
+        document.getElementById('status').innerText = "Last sync: " + new Date().toLocaleTimeString();
     }
 
     function updateHistory(oldTrack) {
@@ -229,7 +219,6 @@
     }
 
     setInterval(fetchTrack, 10000);
-    fetchTrack();
 </script>
 
 </body>
