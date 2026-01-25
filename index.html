@@ -42,13 +42,13 @@
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .status-bar { font-size: 0.65rem; color: #444; margin-top: 20px; }
+        .status-bar { font-size: 0.65rem; color: #444; margin-top: 25px; }
     </style>
 </head>
 <body>
 
 <div class="player-card">
-    <div class="station-name"> 104.3 MYFM Live - V2R4 </div>
+    <div class="station-name">104.3 MYFM Live - V2R5 </div>
     
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
@@ -58,7 +58,7 @@
     <h2 id="title">연결 중...</h2>
     <p id="artist">잠시만 기다려주세요</p>
     
-    <audio id="radio-player" controls>
+    <audio id="radio-player" controls preload="auto">
         <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
     </audio>
 
@@ -67,16 +67,14 @@
         <div id="history-list"></div>
     </div>
 
-    <div class="status-bar" id="status">Syncing (10s delay)...</div>
+    <div class="status-bar" id="status">Syncing (5s delay)...</div>
 </div>
 
 <script>
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
-    
-    // 지연 시간을 10초(10000ms)로 변경
-    const SYNC_DELAY = 10000; 
+    const SYNC_DELAY = 5000; 
     
     let lastTrackId = null;
     let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; 
@@ -146,10 +144,14 @@
         const imgTag = document.getElementById('album-art');
         const placeholder = document.getElementById('placeholder');
         const imageUrl = track.image || track.imagePath || (track.artist && track.artist.image);
+        
+        // 캐시 방지 파라미터 추가 (Date.now())
+        const cacheBuster = "?v=" + Date.now();
         const finalUrl = imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
+        const dynamicUrl = finalUrl + cacheBuster;
 
         if (imageUrl) {
-            imgTag.src = finalUrl;
+            imgTag.src = finalUrl; // 화면에는 원본 사용
             imgTag.onload = () => {
                 imgTag.style.display = 'block';
                 placeholder.style.display = 'none';
@@ -159,19 +161,19 @@
             placeholder.style.display = 'flex';
         }
 
-        // 차량 디스플레이 호환성을 위한 다양한 해상도 전송 로직
+        // [중요] 차량 블루투스 및 잠금 화면 전송 강화 로직
         if ('mediaSession' in navigator) {
+            // 메타데이터를 초기화한 후 다시 설정하여 갱신 알림 강제화
+            navigator.mediaSession.metadata = null; 
+
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
                 artist: artistName,
-                album: "104.3 MYFM",
+                album: "104.3 MYFM Live",
                 artwork: [
-                    { src: finalUrl, sizes: '96x96',   type: 'image/png' },
-                    { src: finalUrl, sizes: '128x128', type: 'image/png' },
-                    { src: finalUrl, sizes: '192x192', type: 'image/png' },
-                    { src: finalUrl, sizes: '256x256', type: 'image/png' },
-                    { src: finalUrl, sizes: '384x384', type: 'image/png' },
-                    { src: finalUrl, sizes: '512x512', type: 'image/png' }
+                    { src: dynamicUrl, sizes: '96x96',   type: 'image/png' },
+                    { src: dynamicUrl, sizes: '256x256', type: 'image/png' },
+                    { src: dynamicUrl, sizes: '512x512', type: 'image/png' }
                 ]
             });
         }
@@ -198,7 +200,7 @@
         });
     }
 
-    // 10초마다 확인
+    // 10초마다 API 확인
     setInterval(fetchTrack, 10000);
     fetchTrack();
 </script>
