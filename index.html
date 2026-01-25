@@ -11,14 +11,15 @@
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #121212; color: white; display: flex; align-items: center; 
+            background: #121212; color: white; display: flex; align-items: flex-start; /* 상단부터 정렬 */
             justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0;
-            overflow: hidden;
+            /* overflow: hidden; 삭제 -> 스크롤 허용 */
+            -webkit-overflow-scrolling: touch; /* 아이폰 부드러운 스크롤 */
         }
-        /* 초기 터치 유도 레이어 */
+        
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 1000; display: flex;
+            background: rgba(0,0,0,0.9); z-index: 1000; display: flex;
             flex-direction: column; align-items: center; justify-content: center;
             cursor: pointer; transition: opacity 0.5s ease;
         }
@@ -28,7 +29,7 @@
         .player-card { 
             background: #1e1e1e; padding: 25px; border-radius: 35px; 
             box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; 
-            width: 85%; max-width: 360px;
+            width: 85%; max-width: 360px; margin-top: 20px; /* 상단 여백 */
         }
         .album-art-container { 
             width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
@@ -52,13 +53,14 @@
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         .refresh-btn { 
-            position: fixed; bottom: 20px; right: 20px; width: 44px; height: 44px; 
-            background: rgba(255, 59, 48, 0.8); border-radius: 50%; display: flex; 
-            align-items: center; justify-content: center; font-size: 20px; z-index: 100;
+            position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; 
+            background: rgba(255, 59, 48, 0.9); border-radius: 50%; display: flex; 
+            align-items: center; justify-content: center; font-size: 24px; z-index: 900;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .status-bar { font-size: 0.65rem; color: #444; margin-top: 25px; }
+        .status-bar { font-size: 0.65rem; color: #444; margin: 25px 0 10px; }
     </style>
 </head>
 <body onclick="startApp()">
@@ -70,7 +72,7 @@
 </div>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM LIVE - V3R4 </div>
+    <div class="station-name">104.3 MYFM LIVE - V3R5 </div>
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
         <img id="album-art" src="" alt="Album Art">
@@ -89,7 +91,7 @@
     <div class="status-bar" id="status">Waiting for touch...</div>
 </div>
 
-<div class="refresh-btn" onclick="location.reload();">🔄</div>
+<div class="refresh-btn" onclick="event.stopPropagation(); location.reload();">🔄</div>
 
 <script>
     const SLUG = "kbig-fm";
@@ -102,21 +104,13 @@
     let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; 
     let audioStarted = false;
 
-    // 화면 터치 시 실행되는 핵심 함수
     function startApp() {
         if (!audioStarted) {
-            // 1. 오디오 재생 시작
             audio.play().then(() => {
                 audioStarted = true;
-                // 2. 안내 레이어 숨기기
                 document.getElementById('overlay').classList.add('hidden');
-                document.getElementById('status').innerText = "Streaming started...";
-                // 3. 데이터 가져오기 시작
                 fetchTrack();
-            }).catch(e => {
-                console.log("Play failed:", e);
-                document.getElementById('status').innerText = "Touch again to play";
-            });
+            }).catch(e => console.log("Play failed:", e));
         }
     }
 
@@ -153,12 +147,11 @@
 
     function updateUI(track, title, artistName) {
         const currentTitle = document.getElementById('title').innerText;
+        const currentArtist = document.getElementById('artist').innerText;
+        const currentImg = document.getElementById('album-art').src;
+
         if (currentTitle !== "연결 중..." && currentTitle !== title) {
-            updateHistory({ 
-                title: currentTitle, 
-                artist: document.getElementById('artist').innerText, 
-                image: document.getElementById('album-art').src 
-            });
+            updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
         }
 
         document.getElementById('title').innerText = title;
@@ -173,7 +166,6 @@
         imgTag.onload = () => { imgTag.style.display = 'block'; placeholder.style.display = 'none'; };
 
         if ('mediaSession' in navigator) {
-            // 블루투스 갱신을 위한 강제 리셋 로직 포함
             navigator.mediaSession.playbackState = "paused";
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title, artist: artistName, album: "104.3 MYFM",
@@ -203,7 +195,6 @@
         });
     }
 
-    // 10초마다 정보 업데이트 (시작 후에만 작동하도록 fetchTrack 내부에서 제어)
     setInterval(fetchTrack, 10000);
     renderHistory();
 </script>
