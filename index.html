@@ -44,6 +44,15 @@
         
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
 
+        /* 히스토리 섹션 스타일 */
+        .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
+        .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 12px; font-weight: bold; }
+        .history-item { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
+        .history-thumb { width: 45px; height: 45px; border-radius: 8px; margin-right: 12px; background: #333; object-fit: cover; flex-shrink: 0; }
+        .history-info { overflow: hidden; }
+        .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
         .refresh-btn { 
             position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; 
             background: #121212; border: 1px solid #333; border-radius: 50%; 
@@ -52,6 +61,7 @@
         }
         .refresh-btn:active { transform: scale(0.85); background: #1a1a1a; }
         
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .status-bar { font-size: 0.65rem; color: #444; margin: 25px 0 10px; text-transform: uppercase; }
     </style>
 </head>
@@ -64,7 +74,7 @@
 </div>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM LIVE ^^ </div>
+    <div class="station-name">104.3 MYFM LIVE - C </div>
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
         <img id="album-art" src="" alt="Album Art">
@@ -75,6 +85,11 @@
     <audio id="radio-player" controls preload="auto">
         <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
     </audio>
+
+    <div class="history-section">
+        <div class="history-title">RECENTLY PLAYED</div>
+        <div id="history-list"></div>
+    </div>
 
     <div class="status-bar" id="status">Waiting for connection...</div>
 </div>
@@ -92,8 +107,8 @@
     
     let lastTrackId = "";
     let audioStarted = false;
+    let historyData = JSON.parse(localStorage.getItem('radioHistory')) || [];
 
-    // 앱 시작 (iOS 자동재생 방지 해제)
     function startApp() {
         if (!audioStarted) {
             audio.play().then(() => {
@@ -104,7 +119,6 @@
         }
     }
 
-    // 노래 정보 가져오기 (10초 주기)
     async function fetchTrack() {
         if (!audioStarted) return;
         try {
@@ -126,16 +140,20 @@
                 const artist = track.artist?.artistName || "Unknown Artist";
                 const trackId = `${title}-${artist}`;
 
-                // 메모리 효율: 곡이 바뀌었을 때만 업데이트 실행
                 if (trackId !== lastTrackId) {
+                    // 이전 곡을 히스토리에 추가 (첫 실행 시 제외)
+                    if (lastTrackId !== "") {
+                        const oldTitle = document.getElementById('title').innerText;
+                        const oldArtist = document.getElementById('artist').innerText;
+                        const oldImg = imgTag.src;
+                        updateHistory({ title: oldTitle, artist: oldArtist, image: oldImg });
+                    }
+                    
                     lastTrackId = trackId;
                     updateUI(track, title, artist);
                 }
             }
-        } catch (e) { 
-            console.error("Fetch error:", e);
-            document.getElementById('status').innerText = "Sync Error - Retrying...";
-        }
+        } catch (e) { console.error("Fetch error:", e); }
     }
 
     function updateUI(track, title, artist) {
@@ -144,45 +162,59 @@
         
         let imageUrl = track.image || track.imagePath || track.artist?.image || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
         if (!imageUrl.startsWith('http')) imageUrl = 'https:' + imageUrl;
-
-        // 이미지 캐시 버스터 (현대차 갱신 유도용)
         const finalImgUrl = imageUrl + "?v=" + Date.now();
 
-        // 이미지 로딩 처리
         imgTag.src = finalImgUrl;
         imgTag.onload = () => {
             imgTag.style.display = 'block';
             placeholder.style.display = 'none';
-            
-            // 이미지 로드 완료 후 미디어 세션 업데이트
             updateMediaSession(title, artist, finalImgUrl);
         };
-
         document.getElementById('status').innerText = "Last sync: " + new Date().toLocaleTimeString();
     }
 
     function updateMediaSession(title, artist, url) {
         if ('mediaSession' in navigator) {
-            // 메타데이터 설정
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: title,
-                artist: artist,
-                album: "104.3 MYFM Live",
-                artwork: [
-                    { src: url, sizes: '512x512', type: 'image/png' }
-                ]
+                title: title, artist: artist, album: "104.3 MYFM Live",
+                artwork: [{ src: url, sizes: '512x512', type: 'image/png' }]
             });
-            
-            // 현대차 그랜저 시스템의 정보 업데이트를 위한 강제 신호
-            // 상태를 잠시 'none'으로 했다가 'playing'으로 바꿔 시스템을 깨웁니다.
             navigator.mediaSession.playbackState = "none";
-            setTimeout(() => {
-                navigator.mediaSession.playbackState = "playing";
-            }, 300);
+            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 300);
         }
     }
 
-    // 10초마다 체크
+    // 히스토리 관리 함수
+    function updateHistory(trackItem) {
+        // 중복 방지: 히스토리의 가장 최근 곡과 같으면 추가 안 함
+        if (historyData.length > 0 && historyData[0].title === trackItem.title) return;
+
+        historyData.unshift(trackItem);
+        if (historyData.length > 5) historyData.pop();
+        localStorage.setItem('radioHistory', JSON.stringify(historyData));
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const listDiv = document.getElementById('history-list');
+        listDiv.innerHTML = ''; 
+        historyData.forEach(item => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'history-item';
+            // 히스토리 이미지가 유효한지 확인
+            const hasImg = item.image && item.image.startsWith('http');
+            itemDiv.innerHTML = `
+                ${hasImg ? `<img src="${item.image}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;">🎵</div>`}
+                <div class="history-info">
+                    <div class="history-song">${item.title}</div>
+                    <div class="history-artist">${item.artist}</div>
+                </div>`;
+            listDiv.appendChild(itemDiv);
+        });
+    }
+
+    // 초기 히스토리 렌더링
+    renderHistory();
     setInterval(fetchTrack, 10000);
 </script>
 </body>
