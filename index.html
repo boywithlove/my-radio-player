@@ -9,40 +9,74 @@
     <link rel="apple-touch-icon" href="https://static.iheart.com/images/logos/iheartradio_logo_240.png">
 
     <style>
-        body { font-family: -apple-system, sans-serif; background: #121212; color: white; display: flex; align-items: flex-start; justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0; -webkit-overflow-scrolling: touch; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: opacity 0.5s ease; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: #121212; color: white; display: flex; align-items: flex-start;
+            justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 1000; display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; transition: opacity 0.5s ease;
+        }
         #overlay.hidden { opacity: 0; pointer-events: none; }
-        .player-card { background: #1e1e1e; padding: 25px; border-radius: 35px; box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; width: 85%; max-width: 360px; margin-top: 20px; }
-        .album-art-container { width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; border-radius: 20px; overflow: hidden; background: #2a2a2a; }
+        
+        .player-card { 
+            background: #1e1e1e; padding: 25px; border-radius: 35px; 
+            box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; 
+            width: 85%; max-width: 360px; margin-top: 20px;
+        }
+        
+        .album-art-container { 
+            width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
+            border-radius: 20px; overflow: hidden; background: #2a2a2a; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        }
         #album-art { width: 100%; height: 100%; object-fit: cover; display: none; }
         .placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #444; }
-        .station-name { color: #ff3b30; font-weight: 800; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase; }
+        
+        .station-name { color: #ff3b30; font-weight: 800; margin-bottom: 8px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
         #title { font-size: 1.4rem; margin: 10px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
         #artist { color: #b3b3b3; margin: 0 0 25px; font-size: 1.1rem; }
+        
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
-        .refresh-btn { position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; background: #121212; border: 1px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; z-index: 900; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
+
+        .refresh-btn { 
+            position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; 
+            background: #121212; border: 1px solid #333; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; font-size: 24px; z-index: 900;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.1s ease;
+        }
         .refresh-btn:active { transform: scale(0.85); background: #1a1a1a; }
+        
+        .status-bar { font-size: 0.65rem; color: #444; margin: 25px 0 10px; text-transform: uppercase; }
     </style>
 </head>
 <body onclick="startApp()">
 
 <div id="overlay">
-    <div style="font-size:50px; animation: pulse 1.5s infinite;">👆</div>
-    <div style="font-weight: bold; font-size: 1.2rem; margin-top:10px;">TOUCH TO START</div>
+    <div style="font-size: 50px; margin-bottom: 20px;">👆</div>
+    <div style="font-weight: bold; font-size: 1.2rem;">TOUCH TO START</div>
+    <div style="font-size: 0.8rem; color: #888; margin-top: 10px;">104.3 MYFM Radio</div>
 </div>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM LIVE~~</div>
+    <div class="station-name">104.3 MYFM LIVE ^^ </div>
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
         <img id="album-art" src="" alt="Album Art">
     </div>
     <h2 id="title">연결 중...</h2>
     <p id="artist">준비 중</p>
+    
     <audio id="radio-player" controls preload="auto">
         <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
     </audio>
-    <div id="status" style="font-size: 10px; color: #444; margin-top: 15px;">Waiting for touch...</div>
+
+    <div class="status-bar" id="status">Waiting for connection...</div>
 </div>
 
 <div class="refresh-btn" onclick="event.stopPropagation(); location.reload();">🔄</div>
@@ -51,20 +85,26 @@
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
+    
     const audio = document.getElementById('radio-player');
-    let lastTrackId = null;
+    const imgTag = document.getElementById('album-art');
+    const placeholder = document.getElementById('placeholder');
+    
+    let lastTrackId = "";
     let audioStarted = false;
 
+    // 앱 시작 (iOS 자동재생 방지 해제)
     function startApp() {
         if (!audioStarted) {
             audio.play().then(() => {
                 audioStarted = true;
                 document.getElementById('overlay').classList.add('hidden');
                 fetchTrack();
-            });
+            }).catch(e => console.log("Play error:", e));
         }
     }
 
+    // 노래 정보 가져오기 (10초 주기)
     async function fetchTrack() {
         if (!audioStarted) return;
         try {
@@ -77,54 +117,73 @@
                     "extensions": { "persistedQuery": { "version": 1, "sha256Hash": "386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060" } }
                 })
             });
+            
             const data = await response.json();
             const track = data.data.sites.find.stream.amp.currentlyPlaying.tracks[0];
+            
             if (track) {
-                const currentId = `${track.title}-${track.artist?.artistName}`;
-                if (currentId !== lastTrackId) {
-                    lastTrackId = currentId;
-                    updateUI(track);
+                const title = track.title || "Unknown Title";
+                const artist = track.artist?.artistName || "Unknown Artist";
+                const trackId = `${title}-${artist}`;
+
+                // 메모리 효율: 곡이 바뀌었을 때만 업데이트 실행
+                if (trackId !== lastTrackId) {
+                    lastTrackId = trackId;
+                    updateUI(track, title, artist);
                 }
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error("Fetch error:", e);
+            document.getElementById('status').innerText = "Sync Error - Retrying...";
+        }
     }
 
-    function updateUI(track) {
-        const title = track.title || "Unknown Title";
-        const artistName = track.artist?.artistName || "Unknown Artist";
+    function updateUI(track, title, artist) {
+        document.getElementById('title').innerText = title;
+        document.getElementById('artist').innerText = artist;
         
-        // 이미지 경로 처리: 복잡한 변환 없이 직접 사용하되 https 보강
         let imageUrl = track.image || track.imagePath || track.artist?.image || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
         if (!imageUrl.startsWith('http')) imageUrl = 'https:' + imageUrl;
 
-        // 웹 UI 업데이트
-        document.getElementById('title').innerText = title;
-        document.getElementById('artist').innerText = artistName;
-        const imgTag = document.getElementById('album-art');
-        imgTag.src = imageUrl;
-        imgTag.onload = () => { imgTag.style.display = 'block'; document.getElementById('placeholder').style.display = 'none'; };
+        // 이미지 캐시 버스터 (현대차 갱신 유도용)
+        const finalImgUrl = imageUrl + "?v=" + Date.now();
 
-        // 아이폰 -> 차량 전송 최적화 (MediaSession)
+        // 이미지 로딩 처리
+        imgTag.src = finalImgUrl;
+        imgTag.onload = () => {
+            imgTag.style.display = 'block';
+            placeholder.style.display = 'none';
+            
+            // 이미지 로드 완료 후 미디어 세션 업데이트
+            updateMediaSession(title, artist, finalImgUrl);
+        };
+
+        document.getElementById('status').innerText = "Last sync: " + new Date().toLocaleTimeString();
+    }
+
+    function updateMediaSession(title, artist, url) {
         if ('mediaSession' in navigator) {
+            // 메타데이터 설정
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
-                artist: artistName,
-                album: "104.3 MYFM",
+                artist: artist,
+                album: "104.3 MYFM Live",
                 artwork: [
-                    { src: imageUrl, sizes: '512x512', type: 'image/png' }
+                    { src: url, sizes: '512x512', type: 'image/png' }
                 ]
             });
             
-            // 현대차 그랜저 시스템 정보 갱신을 위한 강제 트리거
-            navigator.mediaSession.playbackState = "paused";
-            setTimeout(() => { 
-                navigator.mediaSession.playbackState = "playing"; 
+            // 현대차 그랜저 시스템의 정보 업데이트를 위한 강제 신호
+            // 상태를 잠시 'none'으로 했다가 'playing'으로 바꿔 시스템을 깨웁니다.
+            navigator.mediaSession.playbackState = "none";
+            setTimeout(() => {
+                navigator.mediaSession.playbackState = "playing";
             }, 300);
         }
-        document.getElementById('status').innerText = "Synced at " + new Date().toLocaleTimeString();
     }
 
-    setInterval(fetchTrack, 15000);
+    // 10초마다 체크
+    setInterval(fetchTrack, 10000);
 </script>
 </body>
 </html>
