@@ -51,23 +51,14 @@
         .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        /* 수정된 새로고침 버튼 디자인 (옵션 2) */
+        /* 새로고침 버튼: 배경색 통일 및 클릭 효과 */
         .refresh-btn { 
             position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; 
-            background: #121212; /* 웹앱 배경색과 통일 */
-            border: 1px solid #333; /* 경계 구분을 위한 미세한 테두리 */
-            border-radius: 50%; display: flex; 
-            align-items: center; justify-content: center; font-size: 24px; z-index: 900;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            cursor: pointer;
-            transition: transform 0.1s ease; /* 애니메이션 속도 설정 */
+            background: #121212; border: 1px solid #333; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; font-size: 24px; z-index: 900;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.1s ease;
         }
-        
-        /* 클릭 효과 추가 */
-        .refresh-btn:active {
-            transform: scale(0.85); /* 클릭 시 살짝 작아짐 */
-            background: #1a1a1a; /* 클릭 시 약간 밝아짐 */
-        }
+        .refresh-btn:active { transform: scale(0.85); background: #1a1a1a; }
 
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -83,7 +74,7 @@
 </div>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM LIVE - V3R6 </div>
+    <div class="station-name">104.3 MYFM LIVE - V3R7 </div>
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
         <img id="album-art" src="" alt="Album Art">
@@ -170,19 +161,40 @@
         
         const imgTag = document.getElementById('album-art');
         const placeholder = document.getElementById('placeholder');
-        const imageUrl = track.image || track.imagePath || track.artist?.image;
-        const dynamicUrl = (imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : 'https://static.iheart.com/images/logos/iheartradio_logo_240.png') + "?v=" + Date.now();
+        
+        // 이미지 URL 처리 보강 (https 강제)
+        let imageUrl = track.image || track.imagePath || track.artist?.image;
+        if (!imageUrl) {
+            imageUrl = 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
+        }
+        const dynamicUrl = (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl);
 
-        imgTag.src = dynamicUrl;
+        imgTag.src = dynamicUrl + "?v=" + Date.now();
         imgTag.onload = () => { imgTag.style.display = 'block'; placeholder.style.display = 'none'; };
 
+        // 차량 디스플레이 연동을 위한 MediaSession 최적화
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = "paused";
+            // 재생 상태를 일시적으로 끊어 갱신 신호를 줌
+            navigator.mediaSession.playbackState = "none";
+
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: title, artist: artistName, album: "104.3 MYFM",
-                artwork: [{ src: dynamicUrl, sizes: '512x512', type: 'image/png' }]
+                title: title,
+                artist: artistName,
+                album: "104.3 MYFM",
+                artwork: [
+                    { src: dynamicUrl, sizes: '96x96',   type: 'image/png' },
+                    { src: dynamicUrl, sizes: '128x128', type: 'image/png' },
+                    { src: dynamicUrl, sizes: '192x192', type: 'image/png' },
+                    { src: dynamicUrl, sizes: '256x256', type: 'image/png' },
+                    { src: dynamicUrl, sizes: '384x384', type: 'image/png' },
+                    { src: dynamicUrl, sizes: '512x512', type: 'image/png' }
+                ]
             });
-            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 200);
+
+            // 상태 복구
+            setTimeout(() => { 
+                navigator.mediaSession.playbackState = "playing"; 
+            }, 300);
         }
         document.getElementById('status').innerText = "Synced at " + new Date().toLocaleTimeString();
     }
