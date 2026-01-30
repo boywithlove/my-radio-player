@@ -2,49 +2,162 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>104.3 MYFM</title>
+
 <style>
-body { background:#111; color:white; font-family:sans-serif; text-align:center; }
-img { width:250px; border-radius:20px; margin-top:20px; }
+body {
+    margin:0;
+    background:#111;
+    color:white;
+    font-family:-apple-system, sans-serif;
+    text-align:center;
+}
+
+.container {
+    max-width:420px;
+    margin:auto;
+    padding:20px;
+}
+
+img#cover {
+    width:100%;
+    border-radius:20px;
+    margin-top:15px;
+}
+
+h2 { margin-bottom:5px; }
+h3 { margin:10px 0 5px; }
+
+audio {
+    width:100%;
+    margin-top:15px;
+}
+
+.history {
+    margin-top:30px;
+    text-align:left;
+}
+
+.history h4 {
+    font-size:14px;
+    color:#aaa;
+    margin-bottom:10px;
+}
+
+.history-item {
+    display:flex;
+    align-items:center;
+    margin-bottom:12px;
+}
+
+.history-item img {
+    width:50px;
+    height:50px;
+    border-radius:8px;
+    margin-right:10px;
+    object-fit:cover;
+}
+
+.song-info {
+    overflow:hidden;
+}
+
+.song-title {
+    font-size:14px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.song-artist {
+    font-size:12px;
+    color:#888;
+}
 </style>
 </head>
+
 <body>
 
-<h2>🎵 104.3 MYFM</h2>
+<div class="container">
+
+<h2>🎵 104.3 MYFM ^^ </h2>
 
 <img id="cover">
 <h3 id="title">Loading...</h3>
 <p id="artist"></p>
 
-<audio controls autoplay style="width:90%;">
+<audio controls autoplay>
 <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
 </audio>
+
+<div class="history">
+    <h4>RECENTLY PLAYED</h4>
+    <div id="historyList"></div>
+</div>
+
+</div>
 
 <script>
 
 const API_URL =
-"https://webapi.radioedit.iheart.com/graphql?operationName=GetCurrentlyPlayingSongs&variables=%7B%22slug%22%3A%22kbig-fm%22%2C%22paging%22%3A%7B%22take%22%3A1%7D%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060%22%7D%7D";
+"https://webapi.radioedit.iheart.com/graphql?operationName=GetCurrentlyPlayingSongs&variables=%7B%22slug%22%3A%22kbig-fm%22%2C%22paging%22%3A%7B%22take%22%3A6%7D%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060%22%7D%7D";
+
+let lastTrackId = "";
 
 async function fetchTrack() {
     try {
         const res = await fetch(API_URL + "&t=" + Date.now());
         const json = await res.json();
 
-        const track = json.data.sites.find.stream.amp.currentlyPlaying.tracks[0];
+        const tracks = json.data.sites.find.stream.amp.currentlyPlaying.tracks;
+        if (!tracks || tracks.length === 0) return;
 
-        if (!track) return;
+        const current = tracks[0];
+        const currentId = current.title + current.artist.artistName;
 
-        document.getElementById("title").innerText = track.title;
-        document.getElementById("artist").innerText = track.artist.artistName;
-
-        let img = track.imagePath || "";
-        img = img.replace("http://","https://");
-
-        document.getElementById("cover").src = img;
+        // 현재 곡 업데이트
+        if (currentId !== lastTrackId) {
+            lastTrackId = currentId;
+            updateCurrent(current);
+            updateHistory(tracks.slice(1,6)); // 최근 5곡
+        }
 
     } catch(e) {
         console.log("Error:", e);
     }
+}
+
+function updateCurrent(track) {
+    document.getElementById("title").innerText = track.title;
+    document.getElementById("artist").innerText = track.artist.artistName;
+
+    let img = track.imagePath || "";
+    img = img.replace("http://","https://");
+
+    document.getElementById("cover").src = img;
+}
+
+function updateHistory(historyTracks) {
+    const list = document.getElementById("historyList");
+    list.innerHTML = "";
+
+    historyTracks.forEach(track => {
+        let img = (track.imagePath || "").replace("http://","https://");
+
+        const item = document.createElement("div");
+        item.className = "history-item";
+
+        item.innerHTML = `
+            <img src="${img}">
+            <div class="song-info">
+                <div class="song-title">${track.title}</div>
+                <div class="song-artist">${track.artist.artistName}</div>
+            </div>
+        `;
+
+        list.appendChild(item);
+    });
 }
 
 fetchTrack();
