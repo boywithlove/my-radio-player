@@ -11,10 +11,9 @@
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #121212; color: white; display: flex; align-items: flex-start; /* 상단부터 정렬 */
+            background: #121212; color: white; display: flex; align-items: flex-start;
             justify-content: center; min-height: 100vh; margin: 0; padding: 20px 0;
-            /* overflow: hidden; 삭제 -> 스크롤 허용 */
-            -webkit-overflow-scrolling: touch; /* 아이폰 부드러운 스크롤 */
+            -webkit-overflow-scrolling: touch;
         }
         
         #overlay {
@@ -29,7 +28,7 @@
         .player-card { 
             background: #1e1e1e; padding: 25px; border-radius: 35px; 
             box-shadow: 0 25px 50px rgba(0,0,0,0.6); text-align: center; 
-            width: 85%; max-width: 360px; margin-top: 20px; /* 상단 여백 */
+            width: 85%; max-width: 360px; margin-top: 20px;
         }
         .album-art-container { 
             width: 100%; aspect-ratio: 1/1; margin-bottom: 25px; 
@@ -52,12 +51,24 @@
         .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
+        /* 수정된 새로고침 버튼 디자인 (옵션 2) */
         .refresh-btn { 
             position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; 
-            background: rgba(255, 59, 48, 0.9); border-radius: 50%; display: flex; 
+            background: #121212; /* 웹앱 배경색과 통일 */
+            border: 1px solid #333; /* 경계 구분을 위한 미세한 테두리 */
+            border-radius: 50%; display: flex; 
             align-items: center; justify-content: center; font-size: 24px; z-index: 900;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: transform 0.1s ease; /* 애니메이션 속도 설정 */
         }
+        
+        /* 클릭 효과 추가 */
+        .refresh-btn:active {
+            transform: scale(0.85); /* 클릭 시 살짝 작아짐 */
+            background: #1a1a1a; /* 클릭 시 약간 밝아짐 */
+        }
+
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .status-bar { font-size: 0.65rem; color: #444; margin: 25px 0 10px; }
@@ -72,7 +83,7 @@
 </div>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM LIVE - RV1 </div>
+    <div class="station-name">104.3 MYFM LIVE - RV1-1 </div>
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
         <img id="album-art" src="" alt="Album Art">
@@ -97,7 +108,7 @@
     const SLUG = "kbig-fm";
     const PROXY_URL = "https://corsproxy.io/?"; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
-    const SYNC_DELAY = 10000; 
+    const SYNC_DELAY = 1000; 
     
     const audio = document.getElementById('radio-player');
     let lastTrackId = null;
@@ -195,7 +206,7 @@
         });
     }
 
-    setInterval(fetchTrack, 5000);
+    setInterval(fetchTrack, 10000);
     renderHistory();
 </script>
 </body>
