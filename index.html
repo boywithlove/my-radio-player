@@ -43,6 +43,7 @@
         
         audio { width: 100%; height: 45px; filter: invert(1) hue-rotate(180deg); border-radius: 10px; }
 
+        /* 히스토리 섹션 스타일 */
         .history-section { margin-top: 30px; text-align: left; border-top: 1px solid #333; padding-top: 15px; }
         .history-title { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 12px; font-weight: bold; }
         .history-item { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9rem; animation: fadeIn 0.5s ease; }
@@ -51,23 +52,13 @@
         .history-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .history-artist { font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        /* 수정된 새로고침 버튼 디자인 (옵션 2) */
         .refresh-btn { 
             position: fixed; bottom: 25px; right: 25px; width: 50px; height: 50px; 
-            background: #121212; /* 웹앱 배경색과 통일 */
-            border: 1px solid #333; /* 경계 구분을 위한 미세한 테두리 */
-            border-radius: 50%; display: flex; 
+            background: #121212; border: 1px solid #333; border-radius: 50%; display: flex; 
             align-items: center; justify-content: center; font-size: 24px; z-index: 900;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            cursor: pointer;
-            transition: transform 0.1s ease; /* 애니메이션 속도 설정 */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.1s ease;
         }
-        
-        /* 클릭 효과 추가 */
-        .refresh-btn:active {
-            transform: scale(0.85); /* 클릭 시 살짝 작아짐 */
-            background: #1a1a1a; /* 클릭 시 약간 밝아짐 */
-        }
+        .refresh-btn:active { transform: scale(0.85); background: #1a1a1a; }
 
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -83,7 +74,7 @@
 </div>
 
 <div class="player-card">
-    <div class="station-name">104.3 MYFM LIVE - RV1-1 </div>
+    <div class="station-name">104.3 MYFM LIVE - RV1-2 </div>
     <div class="album-art-container">
         <div id="placeholder" class="placeholder">🎵</div>
         <img id="album-art" src="" alt="Album Art">
@@ -106,11 +97,15 @@
 
 <script>
     const SLUG = "kbig-fm";
-    const PROXY_URL = "https://corsproxy.io/?"; 
+    // [수정] 차단된 corsproxy 대신 AllOrigins 사용
+    const PROXY_URL = "https://api.allorigins.win/raw?url="; 
     const API_URL = "https://webapi.radioedit.iheart.com/graphql";
     const SYNC_DELAY = 1000; 
     
     const audio = document.getElementById('radio-player');
+    const imgTag = document.getElementById('album-art');
+    const placeholder = document.getElementById('placeholder');
+    
     let lastTrackId = null;
     let historyData = JSON.parse(localStorage.getItem('radioHistory')) || []; 
     let audioStarted = false;
@@ -129,7 +124,10 @@
         if (!audioStarted) return;
         try {
             const targetUrl = API_URL + "?t=" + new Date().getTime();
-            const response = await fetch(PROXY_URL + encodeURIComponent(targetUrl), {
+            // [수정] 프록시 요청 방식 최적화
+            const finalUrl = PROXY_URL + encodeURIComponent(targetUrl);
+
+            const response = await fetch(finalUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -153,14 +151,18 @@
                     setTimeout(() => updateUI(track, title, artistName), isFirst ? 0 : SYNC_DELAY);
                 }
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e);
+            document.getElementById('status').innerText = "Sync Error - Retrying...";
+        }
     }
 
     function updateUI(track, title, artistName) {
         const currentTitle = document.getElementById('title').innerText;
         const currentArtist = document.getElementById('artist').innerText;
-        const currentImg = document.getElementById('album-art').src;
+        const currentImg = imgTag.src;
 
+        // 곡이 바뀔 때 히스토리 업데이트
         if (currentTitle !== "연결 중..." && currentTitle !== title) {
             updateHistory({ title: currentTitle, artist: currentArtist, image: currentImg });
         }
@@ -168,26 +170,30 @@
         document.getElementById('title').innerText = title;
         document.getElementById('artist').innerText = artistName;
         
-        const imgTag = document.getElementById('album-art');
-        const placeholder = document.getElementById('placeholder');
-        const imageUrl = track.image || track.imagePath || track.artist?.image;
-        const dynamicUrl = (imageUrl ? (imageUrl.startsWith('http') ? imageUrl : 'https:' + imageUrl) : 'https://static.iheart.com/images/logos/iheartradio_logo_240.png') + "?v=" + Date.now();
+        let imageUrl = track.image || track.imagePath || track.artist?.image || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
+        if (!imageUrl.startsWith('http')) imageUrl = 'https:' + imageUrl;
+        const dynamicUrl = imageUrl + "?v=" + Date.now();
 
         imgTag.src = dynamicUrl;
         imgTag.onload = () => { imgTag.style.display = 'block'; placeholder.style.display = 'none'; };
 
+        // [최적화] 차량 디스플레이 연동 (그랜저 IG 특화)
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = "paused";
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title, artist: artistName, album: "104.3 MYFM",
                 artwork: [{ src: dynamicUrl, sizes: '512x512', type: 'image/png' }]
             });
-            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 200);
+            // 갱신 신호를 위해 상태 조작
+            navigator.mediaSession.playbackState = "none";
+            setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 300);
         }
         document.getElementById('status').innerText = "Synced at " + new Date().toLocaleTimeString();
     }
 
     function updateHistory(oldTrack) {
+        // 중복 방지
+        if (historyData.length > 0 && historyData[0].title === oldTrack.title) return;
+        
         historyData.unshift(oldTrack);
         if (historyData.length > 5) historyData.pop();
         localStorage.setItem('radioHistory', JSON.stringify(historyData));
@@ -200,8 +206,13 @@
         historyData.forEach(item => {
             const itemDiv = document.createElement('div');
             itemDiv.className = 'history-item';
-            const hasImg = item.image && item.image.startsWith('http') && !item.image.includes(window.location.host);
-            itemDiv.innerHTML = `${hasImg ? `<img src="${item.image}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;">🎵</div>`}<div class="history-info"><div class="history-song">${item.title}</div><div class="history-artist">${item.artist}</div></div>`;
+            const hasImg = item.image && item.image.startsWith('http');
+            itemDiv.innerHTML = `
+                ${hasImg ? `<img src="${item.image}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;background:#333;">🎵</div>`}
+                <div class="history-info">
+                    <div class="history-song">${item.title}</div>
+                    <div class="history-artist">${item.artist}</div>
+                </div>`;
             listDiv.appendChild(itemDiv);
         });
     }
