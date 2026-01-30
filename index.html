@@ -20,14 +20,32 @@ body {
     padding:20px;
 }
 
+#overlay {
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    z-index:1000;
+}
+
+#overlay button {
+    font-size:22px;
+    padding:15px 30px;
+    border-radius:40px;
+    border:none;
+    background:#ff3b30;
+    color:white;
+}
+
 img#cover {
     width:100%;
     border-radius:20px;
     margin-top:15px;
 }
-
-h2 { margin-bottom:5px; }
-h3 { margin:10px 0 5px; }
 
 audio {
     width:100%;
@@ -42,7 +60,6 @@ audio {
 .history h4 {
     font-size:14px;
     color:#aaa;
-    margin-bottom:10px;
 }
 
 .history-item {
@@ -59,9 +76,7 @@ audio {
     object-fit:cover;
 }
 
-.song-info {
-    overflow:hidden;
-}
+.song-info { overflow:hidden; }
 
 .song-title {
     font-size:14px;
@@ -79,15 +94,18 @@ audio {
 
 <body>
 
-<div class="container">
+<div id="overlay">
+    <h2>🎵 104.3 MYFM</h2>
+    <button onclick="startPlayback()">Tap to Play</button>
+</div>
 
-<h2>🎵 104.3 MYFM ^^ </h2>
+<div class="container">
 
 <img id="cover">
 <h3 id="title">Loading...</h3>
 <p id="artist"></p>
 
-<audio controls autoplay>
+<audio id="radio" controls>
 <source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
 </audio>
 
@@ -104,6 +122,27 @@ const API_URL =
 "https://webapi.radioedit.iheart.com/graphql?operationName=GetCurrentlyPlayingSongs&variables=%7B%22slug%22%3A%22kbig-fm%22%2C%22paging%22%3A%7B%22take%22%3A6%7D%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060%22%7D%7D";
 
 let lastTrackId = "";
+let hasUserInteracted = false;
+
+const audio = document.getElementById("radio");
+
+function startPlayback() {
+    audio.play().then(() => {
+        hasUserInteracted = true;
+        document.getElementById("overlay").style.display = "none";
+    }).catch(() => {
+        console.log("Autoplay blocked");
+    });
+}
+
+// 새로고침 시 자동 재생 시도
+window.addEventListener("load", () => {
+    audio.play().then(() => {
+        document.getElementById("overlay").style.display = "none";
+    }).catch(() => {
+        document.getElementById("overlay").style.display = "flex";
+    });
+});
 
 async function fetchTrack() {
     try {
@@ -116,15 +155,14 @@ async function fetchTrack() {
         const current = tracks[0];
         const currentId = current.title + current.artist.artistName;
 
-        // 현재 곡 업데이트
         if (currentId !== lastTrackId) {
             lastTrackId = currentId;
             updateCurrent(current);
-            updateHistory(tracks.slice(1,6)); // 최근 5곡
+            updateHistory(tracks.slice(1,6));
         }
 
     } catch(e) {
-        console.log("Error:", e);
+        console.log("API error", e);
     }
 }
 
@@ -132,10 +170,18 @@ function updateCurrent(track) {
     document.getElementById("title").innerText = track.title;
     document.getElementById("artist").innerText = track.artist.artistName;
 
-    let img = track.imagePath || "";
-    img = img.replace("http://","https://");
-
+    let img = (track.imagePath || "").replace("http://","https://");
     document.getElementById("cover").src = img;
+
+    // 잠금화면 메타데이터 지원
+    if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: track.title,
+            artist: track.artist.artistName,
+            album: "104.3 MYFM",
+            artwork: [{ src: img, sizes: "512x512", type: "image/jpeg" }]
+        });
+    }
 }
 
 function updateHistory(historyTracks) {
