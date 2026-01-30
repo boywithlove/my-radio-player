@@ -57,10 +57,10 @@
 <div class="refresh-btn" onclick="event.stopPropagation(); location.reload();">🔄</div>
 
 <script>
-    // [중요] 104.3 MYFM의 스트림 ID는 173입니다.
     const STATION_ID = "173";
-    const PROXY_URL = "https://api.allorigins.win/raw?url="; 
-    const API_URL = `https://us.api.iheart.com/api/v3/live-meta/stream/${STATION_ID}/currentTrackMeta?defaultMetadata=true`;
+    // AllOrigins의 get 방식을 사용해 더 안정적으로 호출합니다.
+    const PROXY_URL = "https://api.allorigins.win/get?url="; 
+    const API_URL = `https://api.iheart.com/v3/live-meta/stream/${STATION_ID}/recently-played?limit=1`;
 
     const audio = document.getElementById('radio-player');
     let lastTrackId = null;
@@ -80,21 +80,32 @@
     async function fetchTrack() {
         if (!audioStarted) return;
         try {
-            // GET 방식으로 변경하여 CORS 문제를 우회합니다.
+            // 프록시를 통해 텍스트로 받아온 뒤 JSON으로 파싱합니다.
             const response = await fetch(PROXY_URL + encodeURIComponent(API_URL + "&t=" + Date.now()));
-            const track = await response.json();
+            const rawData = await response.json();
+            const trackList = JSON.parse(rawData.contents);
+            const track = trackList[0]; // 최근 재생 목록의 첫 번째가 현재 곡입니다.
             
             if (track && track.title) {
                 const currentId = `${track.title}-${track.artist}`;
                 if (currentId !== lastTrackId) {
-                    if (lastTrackId !== null) {
-                        updateHistory({ title: document.getElementById('title').innerText, artist: document.getElementById('artist').innerText, image: document.getElementById('album-art').src });
+                    // 메인 화면 정보 교체 전 히스토리에 추가
+                    const oldTitle = document.getElementById('title').innerText;
+                    if (oldTitle !== "연결 중...") {
+                        updateHistory({ 
+                            title: oldTitle, 
+                            artist: document.getElementById('artist').innerText, 
+                            image: document.getElementById('album-art').src 
+                        });
                     }
                     lastTrackId = currentId;
                     updateUI(track);
                 }
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error("데이터 수신 오류:", e);
+            document.getElementById('status').innerText = "Sync Error - Retrying...";
+        }
     }
 
     function updateUI(track) {
@@ -105,10 +116,14 @@
         
         const imgTag = document.getElementById('album-art');
         const placeholder = document.getElementById('placeholder');
-        const imageUrl = track.image || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
-        
+        let imageUrl = track.image || 'https://static.iheart.com/images/logos/iheartradio_logo_240.png';
+        if (!imageUrl.startsWith('http')) imageUrl = 'https:' + imageUrl;
+
         imgTag.src = imageUrl + "?v=" + Date.now();
-        imgTag.onload = () => { imgTag.style.display = 'block'; placeholder.style.display = 'none'; };
+        imgTag.onload = () => { 
+            imgTag.style.display = 'block'; 
+            placeholder.style.display = 'none'; 
+        };
 
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
@@ -118,10 +133,12 @@
             navigator.mediaSession.playbackState = "none";
             setTimeout(() => { navigator.mediaSession.playbackState = "playing"; }, 300);
         }
-        document.getElementById('status').innerText = "Synced at " + new Date().toLocaleTimeString();
+        document.getElementById('status').innerText = "Last sync: " + new Date().toLocaleTimeString();
     }
 
     function updateHistory(oldTrack) {
+        // 중복 방지 로직
+        if (historyData.length > 0 && historyData[0].title === oldTrack.title) return;
         historyData.unshift(oldTrack);
         if (historyData.length > 5) historyData.pop();
         localStorage.setItem('radioHistory', JSON.stringify(historyData));
@@ -134,7 +151,8 @@
         historyData.forEach(item => {
             const itemDiv = document.createElement('div');
             itemDiv.className = 'history-item';
-            itemDiv.innerHTML = `<img src="${item.image}" class="history-thumb"><div class="history-info"><div class="history-song">${item.title}</div><div class="history-artist">${item.artist}</div></div>`;
+            const thumbSrc = item.image.includes('placeholder') ? 'https://static.iheart.com/images/logos/iheartradio_logo_240.png' : item.image;
+            itemDiv.innerHTML = `<img src="${thumbSrc}" class="history-thumb"><div class="history-info"><div class="history-song">${item.title}</div><div class="history-artist">${item.artist}</div></div>`;
             listDiv.appendChild(itemDiv);
         });
     }
