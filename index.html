@@ -145,7 +145,10 @@ let apiTracks = [];        // 웹 API의 최근 곡 목록 (초기 채우기용)
 // 스트림 곡 정보 해석
 // 각 10초 조각의 #EXTINF 에 들어있는 내용:
 //   title="곡",artist="가수",url="song_spot=\"M\" ... amgArtworkURL=\"https://...\" ..."
-// song_spot "M" = 음악, "T" = 방송국 멘트, 비어있음 = 광고
+// song_spot "M" = 음악
+//           "F" = 광고 시간에 대신 나가는 노래 (웹사이트 Recently Played 에는 안 올라옴)
+//           "T" = 방송국 멘트/광고/교통·날씨, 그 외(비어있음, "Spot Block End") = 광고 구간
+// 같은 내용이 조각 파일 안의 ID3 태그(TIT2/TPE1/WXXX)에도 들어있음
 // ---------------------------------------------------------------
 function parseExtinf(text) {
     if (!text) return null;
@@ -153,23 +156,37 @@ function parseExtinf(text) {
     const re = /(\w+)="((?:[^"\\]|\\.)*)"/g;
     let m;
     while ((m = re.exec(text))) attrs[m[1]] = m[2].replace(/\\"/g, '"');
+    return buildMeta(attrs.title, attrs.artist, attrs.url);
+}
+
+function buildMeta(title, artist, urlText) {
+    title = (title || "").trim();
+    artist = (artist || "").trim();
 
     const inner = {};
-    const re2 = /(\w+)="([^"]*)"/g;
-    while ((m = re2.exec(attrs.url || ""))) inner[m[1]] = m[2];
+    const re = /(\w+)="([^"]*)"/g;
+    let m;
+    while ((m = re.exec(urlText || ""))) inner[m[1]] = m[2];
 
     // 커버: 스트림에 실린 주소(https로, 큰 크기로) → 없으면 곡 ID(TPID)로 iHeart 카탈로그 이미지
-    let cover = (inner.amgArtworkURL || "").replace("http://", "https://").replace("fit(200,200)", "fit(600,600)");
+    let cover = inner.amgArtworkURL && inner.amgArtworkURL !== "null" ? inner.amgArtworkURL : "";
+    cover = cover.replace("http://", "https://").replace("fit(200,200)", "fit(600,600)").replace(/([?&]w=)\d+/, "$1600");
     if (!cover && inner.TPID && inner.TPID !== "0") {
         cover = "https://i.iheart.com/v3/catalog/track/" + inner.TPID + "?ops=fit(600,600)";
     }
 
     return {
-        title: attrs.title || "",
-        artist: attrs.artist || "",
-        isMusic: inner.song_spot === "M" && !!attrs.title,
+        title,
+        artist: fixCase(artist),
+        isMusic: (inner.song_spot === "M" || inner.song_spot === "F") && !!title && !!artist,
         cover
     };
+}
+
+// "LEWIS CAPALDI" 처럼 전부 대문자로 오는 가수명을 "Lewis Capaldi" 로
+function fixCase(s) {
+    if (!s || /[a-z]/.test(s) || !/[A-Z]{3}/.test(s)) return s;
+    return s.toLowerCase().replace(/(^|[\s\-\/&(])([a-z])/g, (_, p, c) => p + c.toUpperCase());
 }
 
 // 같은 곡 판별용 키: 스트림과 웹 API의 표기 차이를 무시
@@ -190,9 +207,12 @@ function onStreamMeta(meta) {
         renderHistory();
     } else {
         // 멘트/광고 구간: 방송국 정보 표시 (곡 기록에는 넣지 않음)
-        if (currentKey === "station") return;
-        currentKey = "station";
-        updateCurrent({ title: STATION_NAME, artist: (meta && meta.artist) || "On Air", cover: "" });
+        // 방송국 ID("104.3 MYfm / 90s to Now")만 문구를 쓰고, 광고·교통·날씨 등은 "On Air"
+        const isStationId = meta && /myfm/i.test(meta.title);
+        const subtitle = isStationId && meta.artist ? meta.artist : "On Air";
+        if (currentKey === "station|" + subtitle) return;
+        currentKey = "station|" + subtitle;
+        updateCurrent({ title: STATION_NAME, artist: subtitle, cover: "" });
     }
 }
 
@@ -286,6 +306,7 @@ async function loadApiHistory() {
 // 재생 방식
 //  A) hls.js : 지금 소리가 나는 조각의 곡 정보를 그대로 사용 (정확)
 //  B) 아이폰/아이패드 기본 재생 : 잠금화면 백그라운드 재생을 위해 기본 플레이어 유지,
+//     조각 안의 ID3 태그로 곡 정보를 받음 (정확). ID3 가 안 오면
 //     재생 목록을 따로 읽어 "라이브에서 몇 초 뒤인지"로 지금 조각을 계산 (약 ±10초)
 // ---------------------------------------------------------------
 const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -343,14 +364,43 @@ async function pollPlaylist() {
             t += segs[i].dur;
             if (t >= behind) { seg = segs[i]; break; }
         }
-        onStreamMeta(seg.meta);
+        if (!id3Active) onStreamMeta(seg.meta);
     } catch (e) {
         console.log("playlist error", e);
     }
 }
 
+// Safari 기본 재생은 조각 안의 ID3 태그를 metadata 트랙의 cue 로 넘겨줌
+// cue 가 들어오기 시작하면 추정 대신 이 값을 사용 (소리와 정확히 일치)
+let id3Active = false;
+
+function readId3Cues(track) {
+    const cues = track.activeCues;
+    if (!cues || cues.length === 0) return;
+    const f = {};
+    for (const cue of cues) {
+        const v = cue.value;
+        if (!v || !v.key) continue;
+        f[v.key] = [v.data, v.info].filter(x => typeof x === "string").join(" ");
+    }
+    if (!("TIT2" in f) && !("TPE1" in f) && !("WXXX" in f)) return;
+    id3Active = true;
+    onStreamMeta(buildMeta(f.TIT2, f.TPE1, f.WXXX));
+}
+
+function watchId3() {
+    const hook = track => {
+        if (track.kind !== "metadata") return;
+        track.mode = "hidden";
+        track.addEventListener("cuechange", () => readId3Cues(track));
+    };
+    for (const track of audio.textTracks) hook(track);
+    audio.textTracks.addEventListener("addtrack", e => hook(e.track));
+}
+
 function setupNative() {
     audio.src = STREAM_URL;
+    watchId3();
     pollPlaylist();
     setInterval(pollPlaylist, 5000);
 }
