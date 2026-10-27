@@ -229,6 +229,7 @@ function trackKey(title, artist) {
 function onStreamMeta(meta) {
     if (meta && meta.isMusic) {
         const key = trackKey(meta.title, meta.artist);
+        stationIdSince = 0;
         if (key === currentKey) return;
         if (currentSong && currentSong.key !== key) pushHistory(currentSong);
         currentSong = { key, title: meta.title, artist: meta.artist, cover: meta.cover, time: Date.now() };
@@ -242,9 +243,22 @@ function onStreamMeta(meta) {
         const subtitle = isStationId && meta.artist ? meta.artist : "On Air";
         if (currentKey === "station|" + subtitle) return;
         currentKey = "station|" + subtitle;
+        stationIdSince = isStationId ? Date.now() : 0;
         updateCurrent({ title: STATION_NAME, artist: subtitle, cover: "" });
     }
 }
+
+// 방송국 ID 는 보통 30초 이내. 40초 넘게 이어지면 방송사가 곡 정보 없이 내보낸 노래로 보고 표시만 바꿈
+// (실측: Olivia Rodrigo "Drop Dead" 가 3분 45초 동안 "104.3 MYfm / 90s to Now" 로 나옴, 웹사이트에도 기록 없음)
+const UNTAGGED_SONG_MS = 40000;
+let stationIdSince = 0;
+
+setInterval(() => {
+    if (stationIdSince && Date.now() - stationIdSince > UNTAGGED_SONG_MS) {
+        stationIdSince = 0;
+        updateCurrent({ title: "Now Playing", artist: "Song info not available", cover: "" });
+    }
+}, 2000);
 
 // ---------------------------------------------------------------
 // 화면 갱신
