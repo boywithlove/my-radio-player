@@ -429,17 +429,18 @@ function cueText(x) {
     return "";
 }
 
-function readId3Cues(track) {
-    const cues = track.activeCues;
+function readId3Cues(cues) {
     if (!cues || cues.length === 0) return;
     const f = {};
+    const raw = [];
     for (const cue of cues) {
         const v = cue.value;
+        raw.push(v ? Object.keys(v).map(k => k + ":" + (typeof v[k] === "string" ? v[k].slice(0, 25) : Object.prototype.toString.call(v[k]))).join(",") : "novalue:" + Object.prototype.toString.call(cue.data));
         if (!v || !v.key) continue;
         f[v.key] = [v.info, v.data].map(cueText).join(" ").trim();
     }
     debugInfo.id3Count = (debugInfo.id3Count || 0) + 1;
-    debugInfo.id3 = JSON.stringify(f).slice(0, 300);
+    debugInfo.id3 = raw.join(" ; ").slice(0, 400);
     if (!f.TIT2 && !f.WXXX) return;
 
     // 1순위: 재생 목록에서 같은 제목의 조각 정보 (해석이 검증된 EXTINF 사용)
@@ -455,9 +456,8 @@ function readId3Cues(track) {
     }
     debugInfo.id3Meta = meta ? (meta.isMusic ? "music " : "other ") + meta.title : "unparsed";
 
-    // 노래로 확인된 경우만 ID3 를 사용. 광고/멘트/해석 실패는 추정 방식에 맡김
-    // (ID3 해석이 틀려 화면이 "On Air" 에 고정되는 일을 막기 위함)
-    if (!meta || !meta.isMusic) {
+    // 해석에 실패하면 추정 방식에 맡김 (잘못된 해석으로 화면이 고정되는 일을 막기 위함)
+    if (!meta) {
         id3Active = false;
         return;
     }
@@ -467,14 +467,37 @@ function readId3Cues(track) {
     onStreamMeta(meta);
 }
 
+// Safari 는 cuechange 이벤트를 안 보내거나 cue 길이를 0 으로 넣는 경우가 있어서
+// 1초마다 트랙에 쌓인 cue 중 "현재 재생 위치 직전에 시작한 것"을 직접 찾아 읽음
+const metaTracks = [];
+
 function watchId3() {
     const hook = track => {
-        if (track.kind !== "metadata") return;
+        if (metaTracks.includes(track)) return;
         track.mode = "hidden";
-        track.addEventListener("cuechange", () => readId3Cues(track));
+        metaTracks.push(track);
     };
     for (const track of audio.textTracks) hook(track);
     audio.textTracks.addEventListener("addtrack", e => hook(e.track));
+    setInterval(scanId3, 1000);
+}
+
+function scanId3() {
+    const info = [];
+    for (const track of metaTracks) {
+        const all = track.cues;
+        info.push(`kind=${track.kind} mode=${track.mode} cues=${all ? all.length : "null"}`);
+        if (!all || all.length === 0) continue;
+
+        const now = audio.currentTime;
+        let start = -Infinity;
+        for (const c of all) {
+            if (c.startTime <= now + 0.5 && c.startTime > start) start = c.startTime;
+        }
+        if (start === -Infinity) continue;
+        readId3Cues([...all].filter(c => Math.abs(c.startTime - start) < 0.5));
+    }
+    debugInfo.tracks = info.join(" / ") || "none";
 }
 
 function setupNative() {
@@ -508,6 +531,7 @@ if (location.search.includes("debug")) {
     setInterval(() => {
         box.textContent = [
             "mode: " + debugInfo.mode + "  paused: " + audio.paused + "  tracks: " + audio.textTracks.length,
+            "track: " + (debugInfo.tracks || "-"),
             "id3Active: " + id3Active + "  cues: " + (debugInfo.id3Count || 0) + "  id3Meta: " + (debugInfo.id3Meta || "-"),
             "behind: " + debugInfo.behind,
             "estimate: " + (debugInfo.est || "-"),
