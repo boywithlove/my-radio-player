@@ -451,8 +451,12 @@ function readId3Cues(cues) {
         if (seg) meta = seg.meta;
     }
     // 2순위: ID3 자체 해석
-    if (!meta && /song_spot=/.test(f.WXXX || "")) {
-        meta = buildMeta(f.TIT2, f.TPE1, f.WXXX);
+    // Safari 는 WXXX 를 URL 인코딩해서 줌 (song_spot=%22F%22...) → 디코딩. TXXX 에도 같은 내용이 옴
+    let wx = f.WXXX || "";
+    try { wx = decodeURIComponent(wx); } catch (e) {}
+    wx = (f.TXXX || "") + " " + wx;
+    if (!meta && /song_spot="/.test(wx)) {
+        meta = buildMeta(f.TIT2, f.TPE1, wx);
     }
     debugInfo.id3Meta = meta ? (meta.isMusic ? "music " : "other ") + meta.title : "unparsed";
 
