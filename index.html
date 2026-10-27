@@ -85,6 +85,12 @@ audio {
     text-overflow:ellipsis;
 }
 
+.updated {
+    margin-top:30px;
+    font-size:11px;
+    color:#555;
+}
+
 .song-artist {
     font-size:12px;
     color:#888;
@@ -105,30 +111,265 @@ audio {
 <h3 id="title">Loading...</h3>
 <p id="artist"></p>
 
-<audio id="radio" controls>
-<source src="https://stream.revma.ihrhls.com/zc173/hls.m3u8" type="application/x-mpegURL">
-</audio>
+<audio id="radio" controls></audio>
 
 <div class="history">
     <h4>RECENTLY PLAYED</h4>
     <div id="historyList"></div>
 </div>
 
+<div class="updated">Last updated: 2026-10-27</div>
+
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <script>
 
-const API_URL =
-"https://webapi.radioedit.iheart.com/graphql?operationName=GetCurrentlyPlayingSongs&variables=%7B%22slug%22%3A%22kbig-fm%22%2C%22paging%22%3A%7B%22take%22%3A6%7D%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060%22%7D%7D";
+const STREAM_URL = "https://stream.revma.ihrhls.com/zc173/hls.m3u8";
+const STATION_NAME = "104.3 MYFM";
+const STATION_LOGO = "https://static.iheart.com/images/logos/iheartradio_logo_240.png";
+const HISTORY_SIZE = 10;
 
-let lastTrackId = "";
-let hasUserInteracted = false;
+// 처음 열었을 때 "최근 재생" 목록을 채우는 용도로만 사용
+const API_URL =
+"https://webapi.radioedit.iheart.com/graphql?operationName=GetCurrentlyPlayingSongs&variables=%7B%22slug%22%3A%22kbig-fm%22%2C%22paging%22%3A%7B%22take%22%3A15%7D%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22386763c17145056713327cddec890cd9d4fea7558efc56d09b7cd4167eef6060%22%7D%7D";
 
 const audio = document.getElementById("radio");
 
+let currentKey = "";       // 화면에 표시 중인 항목
+let currentSong = null;    // 지금 나오는 곡 (멘트/광고 중이면 직전 곡 유지)
+let localHistory = [];     // 이 페이지를 연 뒤 실제로 들은 곡
+let apiTracks = [];        // 웹 API의 최근 곡 목록 (초기 채우기용)
+
+// ---------------------------------------------------------------
+// 스트림 곡 정보 해석
+// 각 10초 조각의 #EXTINF 에 들어있는 내용:
+//   title="곡",artist="가수",url="song_spot=\"M\" ... amgArtworkURL=\"https://...\" ..."
+// song_spot "M" = 음악, "T" = 방송국 멘트, 비어있음 = 광고
+// ---------------------------------------------------------------
+function parseExtinf(text) {
+    if (!text) return null;
+    const attrs = {};
+    const re = /(\w+)="((?:[^"\\]|\\.)*)"/g;
+    let m;
+    while ((m = re.exec(text))) attrs[m[1]] = m[2].replace(/\\"/g, '"');
+
+    const inner = {};
+    const re2 = /(\w+)="([^"]*)"/g;
+    while ((m = re2.exec(attrs.url || ""))) inner[m[1]] = m[2];
+
+    // 커버: 스트림에 실린 주소(https로, 큰 크기로) → 없으면 곡 ID(TPID)로 iHeart 카탈로그 이미지
+    let cover = (inner.amgArtworkURL || "").replace("http://", "https://").replace("fit(200,200)", "fit(600,600)");
+    if (!cover && inner.TPID && inner.TPID !== "0") {
+        cover = "https://i.iheart.com/v3/catalog/track/" + inner.TPID + "?ops=fit(600,600)";
+    }
+
+    return {
+        title: attrs.title || "",
+        artist: attrs.artist || "",
+        isMusic: inner.song_spot === "M" && !!attrs.title,
+        cover
+    };
+}
+
+// 같은 곡 판별용 키: 스트림과 웹 API의 표기 차이를 무시
+// 예) "Blank Space" = "Blank Space (Taylor's Version)", "Blink 182" = "blink-182"
+function trackKey(title, artist) {
+    const norm = s => (s || "").toLowerCase().replace(/\(.*?\)|\[.*?\]/g, "").replace(/[^a-z0-9가-힣]/g, "");
+    return norm(title) + "|" + norm(artist);
+}
+
+function onStreamMeta(meta) {
+    if (meta && meta.isMusic) {
+        const key = trackKey(meta.title, meta.artist);
+        if (key === currentKey) return;
+        if (currentSong && currentSong.key !== key) pushHistory(currentSong);
+        currentSong = { key, title: meta.title, artist: meta.artist, cover: meta.cover };
+        currentKey = key;
+        updateCurrent(currentSong);
+        renderHistory();
+    } else {
+        // 멘트/광고 구간: 방송국 정보 표시 (곡 기록에는 넣지 않음)
+        if (currentKey === "station") return;
+        currentKey = "station";
+        updateCurrent({ title: STATION_NAME, artist: (meta && meta.artist) || "On Air", cover: "" });
+    }
+}
+
+// ---------------------------------------------------------------
+// 화면 갱신
+// ---------------------------------------------------------------
+function updateCurrent(track) {
+    document.getElementById("title").innerText = track.title;
+    document.getElementById("artist").innerText = track.artist;
+
+    const img = track.cover || STATION_LOGO;
+    document.getElementById("cover").src = img;
+
+    // 잠금화면 메타데이터 지원
+    if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: track.title,
+            artist: track.artist,
+            album: STATION_NAME,
+            artwork: [{ src: img, sizes: "600x600", type: "image/jpeg" }]
+        });
+    }
+}
+
+function pushHistory(song) {
+    localHistory = localHistory.filter(s => s.key !== song.key);
+    localHistory.unshift(song);
+    localHistory = localHistory.slice(0, HISTORY_SIZE);
+}
+
+function renderHistory() {
+    // 직접 들은 곡을 먼저, 모자라면 웹 API 목록으로 채움
+    const list = localHistory.slice();
+    const seen = new Set(list.map(s => s.key));
+    if (currentSong) seen.add(currentSong.key);
+
+    // API 목록은 방송보다 앞서 있으므로 지금 곡 이후(=더 과거) 것만 사용
+    let older = apiTracks;
+    const idx = currentSong ? apiTracks.findIndex(t => t.key === currentSong.key) : -1;
+    if (idx >= 0) older = apiTracks.slice(idx + 1);
+
+    for (const t of older) {
+        if (list.length >= HISTORY_SIZE) break;
+        if (seen.has(t.key)) continue;
+        seen.add(t.key);
+        list.push(t);
+    }
+
+    const box = document.getElementById("historyList");
+    box.innerHTML = "";
+    list.forEach(track => {
+        const item = document.createElement("div");
+        item.className = "history-item";
+
+        const img = document.createElement("img");
+        img.src = track.cover || STATION_LOGO;
+
+        const info = document.createElement("div");
+        info.className = "song-info";
+        const t = document.createElement("div");
+        t.className = "song-title";
+        t.innerText = track.title;
+        const a = document.createElement("div");
+        a.className = "song-artist";
+        a.innerText = track.artist;
+        info.append(t, a);
+
+        item.append(img, info);
+        box.appendChild(item);
+    });
+}
+
+async function loadApiHistory() {
+    try {
+        const res = await fetch(API_URL + "&t=" + Date.now());
+        const json = await res.json();
+        const tracks = json.data.sites.find.stream.amp.currentlyPlaying.tracks || [];
+        apiTracks = tracks.map(t => ({
+            key: trackKey(t.title, t.artist.artistName),
+            title: t.title,
+            artist: t.artist.artistName,
+            cover: (t.imagePath || "").replace("http://", "https://")
+        }));
+        renderHistory();
+    } catch (e) {
+        console.log("API error", e);
+    }
+}
+
+// ---------------------------------------------------------------
+// 재생 방식
+//  A) hls.js : 지금 소리가 나는 조각의 곡 정보를 그대로 사용 (정확)
+//  B) 아이폰/아이패드 기본 재생 : 잠금화면 백그라운드 재생을 위해 기본 플레이어 유지,
+//     재생 목록을 따로 읽어 "라이브에서 몇 초 뒤인지"로 지금 조각을 계산 (약 ±10초)
+// ---------------------------------------------------------------
+const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const canNativeHls = audio.canPlayType("application/vnd.apple.mpegurl") !== "";
+
+function setupHlsJs() {
+    const hls = new Hls();
+    hls.loadSource(STREAM_URL);
+    hls.attachMedia(audio);
+
+    hls.on(Hls.Events.FRAG_CHANGED, (event, data) => {
+        onStreamMeta(parseExtinf(data.frag.title));
+    });
+
+    hls.on(Hls.Events.ERROR, (event, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+    });
+}
+
+let mediaPlaylistUrl = "";
+
+async function pollPlaylist() {
+    try {
+        if (!mediaPlaylistUrl) {
+            const res = await fetch(STREAM_URL, { cache: "no-store" });
+            const text = await res.text();
+            const line = text.split("\n").map(s => s.trim()).find(s => s && !s.startsWith("#"));
+            if (!line) return;
+            mediaPlaylistUrl = new URL(line, res.url).href;
+        }
+
+        const res = await fetch(mediaPlaylistUrl, { cache: "no-store" });
+        if (!res.ok) { mediaPlaylistUrl = ""; return; }
+        const lines = (await res.text()).split("\n");
+
+        const segs = [];
+        for (const l of lines) {
+            const m = l.match(/^#EXTINF:([\d.]+),?(.*)$/);
+            if (m) segs.push({ dur: parseFloat(m[1]), meta: parseExtinf(m[2]) });
+        }
+        if (segs.length === 0) return;
+
+        // 라이브 끝에서 몇 초 뒤를 재생 중인지
+        let behind = 30;
+        if (audio.seekable.length > 0) {
+            behind = audio.seekable.end(audio.seekable.length - 1) - audio.currentTime;
+        }
+
+        let seg = segs[0];
+        let t = 0;
+        for (let i = segs.length - 1; i >= 0; i--) {
+            t += segs[i].dur;
+            if (t >= behind) { seg = segs[i]; break; }
+        }
+        onStreamMeta(seg.meta);
+    } catch (e) {
+        console.log("playlist error", e);
+    }
+}
+
+function setupNative() {
+    audio.src = STREAM_URL;
+    pollPlaylist();
+    setInterval(pollPlaylist, 5000);
+}
+
+if (window.Hls && Hls.isSupported() && !isAppleMobile) {
+    setupHlsJs();
+} else if (canNativeHls) {
+    setupNative();
+} else if (window.Hls && Hls.isSupported()) {
+    setupHlsJs();
+}
+
+loadApiHistory();
+
+// ---------------------------------------------------------------
+// 재생 시작 / 자동재생
+// ---------------------------------------------------------------
 function startPlayback() {
     audio.play().then(() => {
-        hasUserInteracted = true;
         document.getElementById("overlay").style.display = "none";
     }).catch(() => {
         console.log("Autoplay blocked");
@@ -143,71 +384,6 @@ window.addEventListener("load", () => {
         document.getElementById("overlay").style.display = "flex";
     });
 });
-
-async function fetchTrack() {
-    try {
-        const res = await fetch(API_URL + "&t=" + Date.now());
-        const json = await res.json();
-
-        const tracks = json.data.sites.find.stream.amp.currentlyPlaying.tracks;
-        if (!tracks || tracks.length === 0) return;
-
-        const current = tracks[0];
-        const currentId = current.title + current.artist.artistName;
-
-        if (currentId !== lastTrackId) {
-            lastTrackId = currentId;
-            updateCurrent(current);
-            updateHistory(tracks.slice(1,6));
-        }
-
-    } catch(e) {
-        console.log("API error", e);
-    }
-}
-
-function updateCurrent(track) {
-    document.getElementById("title").innerText = track.title;
-    document.getElementById("artist").innerText = track.artist.artistName;
-
-    let img = (track.imagePath || "").replace("http://","https://");
-    document.getElementById("cover").src = img;
-
-    // 잠금화면 메타데이터 지원
-    if ("mediaSession" in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title: track.title,
-            artist: track.artist.artistName,
-            album: "104.3 MYFM",
-            artwork: [{ src: img, sizes: "512x512", type: "image/jpeg" }]
-        });
-    }
-}
-
-function updateHistory(historyTracks) {
-    const list = document.getElementById("historyList");
-    list.innerHTML = "";
-
-    historyTracks.forEach(track => {
-        let img = (track.imagePath || "").replace("http://","https://");
-
-        const item = document.createElement("div");
-        item.className = "history-item";
-
-        item.innerHTML = `
-            <img src="${img}">
-            <div class="song-info">
-                <div class="song-title">${track.title}</div>
-                <div class="song-artist">${track.artist.artistName}</div>
-            </div>
-        `;
-
-        list.appendChild(item);
-    });
-}
-
-fetchTrack();
-setInterval(fetchTrack, 10000);
 
 </script>
 
