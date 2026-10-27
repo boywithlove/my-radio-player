@@ -153,7 +153,9 @@ const debugInfo = {};      // ?debug 화면용
 function loadLocalHistory() {
     try {
         const list = JSON.parse(localStorage.getItem(HISTORY_STORE)) || [];
-        return list.filter(s => s && s.key && Date.now() - s.time < HISTORY_KEEP_MS);
+        return list
+            .filter(s => s && s.title && Date.now() - s.time < HISTORY_KEEP_MS)
+            .map(s => ({ ...s, key: trackKey(s.title, s.artist) }));
     } catch (e) {
         return [];
     }
@@ -215,9 +217,13 @@ function fixCase(s) {
 
 // 같은 곡 판별용 키: 스트림과 웹 API의 표기 차이를 무시
 // 예) "Blank Space" = "Blank Space (Taylor's Version)", "Blink 182" = "blink-182"
+// 예) "Wanted" = "The Wanted", "Maroon 5 / Christina Aguilera" = "Maroon 5"
 function trackKey(title, artist) {
     const norm = s => (s || "").toLowerCase().replace(/\(.*?\)|\[.*?\]/g, "").replace(/[^a-z0-9가-힣]/g, "");
-    return norm(title) + "|" + norm(artist);
+    const mainArtist = (artist || "").toLowerCase()
+        .split(/\s*(?:\/|,|&|\bfeat\.?|\bft\.?|\bwith\b|\bx\b)\s*/)[0]
+        .replace(/^the\s+/, "");
+    return norm(title) + "|" + norm(mainArtist);
 }
 
 function onStreamMeta(meta) {
@@ -390,7 +396,11 @@ async function pollPlaylist() {
             if (t >= behind) { seg = segs[i]; break; }
         }
         lastSegs = segs;
-        debugInfo.behind = behind.toFixed(1);
+        debugInfo.behind = behind.toFixed(1) + " (t=" + audio.currentTime.toFixed(1) +
+            (audio.seekable.length ? " seek=" + audio.seekable.start(0).toFixed(1) + "~" +
+            audio.seekable.end(audio.seekable.length - 1).toFixed(1) : " seek=none") + ")";
+        debugInfo.est = seg.meta ? (seg.meta.isMusic ? "music " : "other ") + seg.meta.title : "empty";
+        debugInfo.segs = segs.map(s => s.meta ? (s.meta.isMusic ? "M:" : "x:") + s.meta.title.slice(0, 12) : "-").join(" | ");
 
         // ID3 가 2분 넘게 안 오면 추정 방식으로 복귀
         if (id3Active && Date.now() - lastId3Time > 120000) id3Active = false;
@@ -429,19 +439,28 @@ function readId3Cues(track) {
         f[v.key] = [v.info, v.data].map(cueText).join(" ").trim();
     }
     debugInfo.id3Count = (debugInfo.id3Count || 0) + 1;
-    debugInfo.id3 = JSON.stringify(f).slice(0, 200);
+    debugInfo.id3 = JSON.stringify(f).slice(0, 300);
     if (!f.TIT2 && !f.WXXX) return;
 
+    // 1순위: 재생 목록에서 같은 제목의 조각 정보 (해석이 검증된 EXTINF 사용)
     let meta = null;
-    if (/song_spot=/.test(f.WXXX || "")) {
-        meta = buildMeta(f.TIT2, f.TPE1, f.WXXX);
-    } else if (f.TIT2) {
-        // 구분값을 못 읽으면 재생 목록에서 같은 제목의 조각 정보를 사용
+    if (f.TIT2) {
         const title = f.TIT2.toLowerCase();
         const seg = lastSegs.slice().reverse().find(s => s.meta && s.meta.title.toLowerCase() === title);
         if (seg) meta = seg.meta;
     }
-    if (!meta) return;
+    // 2순위: ID3 자체 해석
+    if (!meta && /song_spot=/.test(f.WXXX || "")) {
+        meta = buildMeta(f.TIT2, f.TPE1, f.WXXX);
+    }
+    debugInfo.id3Meta = meta ? (meta.isMusic ? "music " : "other ") + meta.title : "unparsed";
+
+    // 노래로 확인된 경우만 ID3 를 사용. 광고/멘트/해석 실패는 추정 방식에 맡김
+    // (ID3 해석이 틀려 화면이 "On Air" 에 고정되는 일을 막기 위함)
+    if (!meta || !meta.isMusic) {
+        id3Active = false;
+        return;
+    }
 
     id3Active = true;
     lastId3Time = Date.now();
@@ -484,14 +503,16 @@ setInterval(loadApiHistory, 3 * 60 * 1000);
 // ---------------------------------------------------------------
 if (location.search.includes("debug")) {
     const box = document.createElement("pre");
-    box.style.cssText = "text-align:left;font-size:10px;color:#8f8;white-space:pre-wrap;word-break:break-all;";
-    document.querySelector(".container").appendChild(box);
+    box.style.cssText = "text-align:left;font-size:11px;color:#8f8;white-space:pre-wrap;word-break:break-all;margin:0 0 10px;";
+    document.querySelector(".container").prepend(box);
     setInterval(() => {
         box.textContent = [
-            "mode: " + debugInfo.mode,
-            "id3Active: " + id3Active + "  cues: " + (debugInfo.id3Count || 0),
-            "behind: " + debugInfo.behind + "s",
-            "segs: " + lastSegs.length,
+            "mode: " + debugInfo.mode + "  paused: " + audio.paused + "  tracks: " + audio.textTracks.length,
+            "id3Active: " + id3Active + "  cues: " + (debugInfo.id3Count || 0) + "  id3Meta: " + (debugInfo.id3Meta || "-"),
+            "behind: " + debugInfo.behind,
+            "estimate: " + (debugInfo.est || "-"),
+            "segs: " + (debugInfo.segs || "-"),
+            "shown: " + currentKey,
             "id3: " + (debugInfo.id3 || "-")
         ].join("\n");
     }, 1000);
