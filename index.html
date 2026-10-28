@@ -95,6 +95,12 @@ audio {
     font-size:12px;
     color:#888;
 }
+
+#album {
+    margin-top:-8px;
+    font-size:13px;
+    color:#888;
+}
 </style>
 </head>
 
@@ -110,6 +116,7 @@ audio {
 <img id="cover">
 <h3 id="title">Loading...</h3>
 <p id="artist"></p>
+<p id="album"></p>
 
 <audio id="radio" controls></audio>
 
@@ -118,7 +125,7 @@ audio {
     <div id="historyList"></div>
 </div>
 
-<div class="updated">Last updated: 2026-10-27</div>
+<div class="updated">Last updated: 2026-10-28</div>
 
 </div>
 
@@ -232,10 +239,11 @@ function onStreamMeta(meta) {
         stationIdSince = 0;
         if (key === currentKey) return;
         if (currentSong && currentSong.key !== key) pushHistory(currentSong);
-        currentSong = { key, title: meta.title, artist: meta.artist, cover: meta.cover, time: Date.now() };
+        currentSong = { key, title: meta.title, artist: meta.artist, cover: meta.cover, album: "", time: Date.now() };
         currentKey = key;
         updateCurrent(currentSong);
         renderHistory();
+        enrichSong(currentSong);
     } else {
         // 멘트/광고 구간: 방송국 정보 표시 (곡 기록에는 넣지 않음)
         // 방송국 ID("104.3 MYfm / 90s to Now")만 문구를 쓰고, 광고·교통·날씨 등은 "On Air"
@@ -266,6 +274,7 @@ setInterval(() => {
 function updateCurrent(track) {
     document.getElementById("title").innerText = track.title;
     document.getElementById("artist").innerText = track.artist;
+    document.getElementById("album").innerText = track.album || "";
 
     setImage(document.getElementById("cover"), track.cover);
 
@@ -274,7 +283,7 @@ function updateCurrent(track) {
         navigator.mediaSession.metadata = new MediaMetadata({
             title: track.title,
             artist: track.artist,
-            album: STATION_NAME,
+            album: track.album || STATION_NAME,
             artwork: [{ src: track.cover || STATION_LOGO, sizes: "600x600" }]
         });
     }
@@ -313,6 +322,7 @@ function renderHistory() {
 
         const img = document.createElement("img");
         setImage(img, track.cover);
+        if (!track.cover) fillMissingCover(track);
 
         const info = document.createElement("div");
         info.className = "song-info";
@@ -329,6 +339,136 @@ function renderHistory() {
     });
 }
 
+// ---------------------------------------------------------------
+// 커버/앨범 보완: 스트림에 커버가 없거나(광고 시간 노래 F 등) 앨범명이 필요할 때
+//   웹 API 목록 → iHeart 검색 → iTunes 검색 순으로 찾음
+//   제목+가수가 맞는 결과만 사용 (커버곡·노래방 버전 등 제외), 결과는 브라우저에 저장
+// ---------------------------------------------------------------
+const LOOKUP_STORE = "myfmLookup";
+const LOOKUP_MAX = 300;
+let lookupCache = loadLookupCache();
+const lookupPending = new Map();
+const coverLooking = new Set();
+
+function loadLookupCache() {
+    try {
+        return JSON.parse(localStorage.getItem(LOOKUP_STORE)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveLookupCache() {
+    try {
+        const keys = Object.keys(lookupCache);
+        if (keys.length > LOOKUP_MAX) {
+            keys.sort((a, b) => lookupCache[a].t - lookupCache[b].t)
+                .slice(0, keys.length - LOOKUP_MAX)
+                .forEach(k => delete lookupCache[k]);
+        }
+        localStorage.setItem(LOOKUP_STORE, JSON.stringify(lookupCache));
+    } catch (e) {}
+}
+
+function searchQuery(title, artist) {
+    const mainArtist = (artist || "").split(/\s*(?:\/|,|&|\bfeat\.?|\bft\.?)\s*/i)[0];
+    return (title || "").replace(/\(.*?\)|\[.*?\]/g, " ") + " " + mainArtist;
+}
+
+async function searchIheart(title, artist) {
+    const url = "https://api.iheart.com/api/v3/search/all?keywords=" + encodeURIComponent(searchQuery(title, artist)) +
+        "&maxRows=10&bundle=false&artist=false&track=true&station=false&podcast=false&playlist=false";
+    const json = await (await fetch(url)).json();
+    const key = trackKey(title, artist);
+    const hit = ((json.results && json.results.tracks) || []).find(t => trackKey(t.title, t.artistName) === key);
+    if (!hit) return null;
+    return {
+        cover: hit.image ? hit.image + (hit.image.includes("?") ? "&" : "?") + "ops=fit(600,600)" : "",
+        album: hit.albumName || ""
+    };
+}
+
+async function searchItunes(title, artist) {
+    const url = "https://itunes.apple.com/search?entity=song&limit=10&term=" + encodeURIComponent(searchQuery(title, artist));
+    const json = await (await fetch(url)).json();
+    const key = trackKey(title, artist);
+    const hit = (json.results || []).find(t => trackKey(t.trackName, t.artistName) === key);
+    if (!hit) return null;
+    return {
+        cover: (hit.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+        album: (hit.collectionName || "").replace(/\s+-\s+(Single|EP)$/i, "")
+    };
+}
+
+function lookupTrack(title, artist) {
+    const key = trackKey(title, artist);
+    if (lookupCache[key]) return Promise.resolve(lookupCache[key]);
+    if (lookupPending.has(key)) return lookupPending.get(key);
+
+    const job = (async () => {
+        const result = { cover: "", album: "", t: Date.now() };
+        let failed = false;
+        for (const search of [searchIheart, searchItunes]) {
+            try {
+                const r = await search(title, artist);
+                if (r) {
+                    result.cover = result.cover || r.cover;
+                    result.album = result.album || r.album;
+                }
+            } catch (e) {
+                failed = true;
+            }
+            if (result.cover && result.album) break;
+        }
+        // 네트워크 오류가 아니면 "못 찾음"도 저장해서 같은 곡을 반복 검색하지 않음
+        if (result.cover || !failed) {
+            lookupCache[key] = result;
+            saveLookupCache();
+        }
+        return result;
+    })().finally(() => lookupPending.delete(key));
+
+    lookupPending.set(key, job);
+    return job;
+}
+
+async function enrichSong(song) {
+    // 웹 API 목록에 같은 곡이 있으면 그 정보부터 사용 (검색 불필요)
+    const api = apiTracks.find(t => t.key === song.key);
+    if (api) {
+        if (!song.cover && api.cover) song.cover = api.cover;
+        if (!song.album && api.album) song.album = api.album;
+    }
+    if (!song.cover || !song.album) {
+        const r = await lookupTrack(song.title, song.artist);
+        if (!song.cover && r.cover) song.cover = r.cover;
+        if (!song.album && r.album) song.album = r.album;
+    }
+
+    if (currentSong === song && currentKey === song.key) updateCurrent(song);
+    // 이미 최근 재생 목록으로 넘어갔으면 그 기록도 갱신 (F 노래도 커버·앨범과 함께 저장)
+    const saved = localHistory.find(s => s.key === song.key);
+    if (saved && saved !== song) {
+        saved.cover = saved.cover || song.cover;
+        saved.album = saved.album || song.album;
+    }
+    saveLocalHistory();
+    renderHistory();
+}
+
+// 최근 재생 목록에서 커버가 없는 곡도 같은 방법으로 채움
+function fillMissingCover(track) {
+    if (coverLooking.has(track.key)) return;
+    coverLooking.add(track.key);
+    lookupTrack(track.title, track.artist).then(r => {
+        if (!r.cover) return;
+        track.cover = r.cover;
+        if (!track.album) track.album = r.album;
+        saveLocalHistory();
+        renderHistory();
+    });
+}
+
 async function loadApiHistory() {
     try {
         const res = await fetch(API_URL + "&t=" + Date.now());
@@ -339,6 +479,7 @@ async function loadApiHistory() {
             title: t.title,
             artist: t.artist.artistName,
             cover: (t.imagePath || "").replace("http://", "https://"),
+            album: t.albumName || "",
             time: (t.startTime || 0) * 1000
         }));
         renderHistory();
