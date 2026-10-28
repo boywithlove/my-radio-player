@@ -102,7 +102,7 @@ audio {
     margin:18px auto 0;
     border:none;
     border-radius:50%;
-    background:#ff3b30;
+    background:#3a3a3c;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -111,6 +111,7 @@ audio {
 }
 
 .play-btn:active {
+    background:#48484a;
     transform:scale(0.94);
 }
 
@@ -265,8 +266,9 @@ function buildMeta(title, artist, urlText) {
 }
 
 // "LEWIS CAPALDI" 처럼 전부 대문자로 오는 가수명을 "Lewis Capaldi" 로
+// 한 단어 이름(TLC, ABBA, MGMT 등)은 원래 대문자일 수 있어서 그대로 둠
 function fixCase(s) {
-    if (!s || /[a-z]/.test(s) || !/[A-Z]{3}/.test(s)) return s;
+    if (!s || /[a-z]/.test(s) || !/[A-Z]{3}/.test(s) || !/\s/.test(s.trim())) return s;
     return s.toLowerCase().replace(/(^|[\s\-\/&(])([a-z])/g, (_, p, c) => p + c.toUpperCase());
 }
 
